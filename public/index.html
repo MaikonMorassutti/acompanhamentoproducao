@@ -1,0 +1,2148 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard de Máquinas</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Incluindo Chart.js para os gráficos -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .tab-button.active { border-color: #4f46e5; color: #4f46e5; background-color: #eef2ff; }
+        .modal-backdrop { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.5); display: flex; justify-content: center; align-items: center; z-index: 50; }
+        .progress-input { width: 75px; padding: 4px 8px; border-radius: 6px; border: 1px solid #d1d5db; text-align: center; -moz-appearance: textfield; font-size: 0.75rem; /* text-xs */ }
+        .progress-input::-webkit-outer-spin-button, .progress-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+        /* Estilos para colunas e cabeçalhos pegajosos */
+        .sticky-col {
+            position: sticky;
+            background-color: white;
+            z-index: 10;
+            border-right: 1px solid #e5e7eb;
+        }
+        .sticky-header {
+            z-index: 20 !important; /* Garante que os cabeçalhos fiquem acima dos dados ao rolar */
+        }
+        /* Ajusta o padding para as células da tabela do dashboard para uma fonte menor */
+        #dashboard-table-body td {
+            padding: 0.5rem 0.75rem; /* px-3 py-2 */
+            font-size: 0.75rem; /* text-xs */
+            text-align: center; /* Centraliza o texto nas células de dados */
+        }
+        #dashboard-table-body th {
+            padding: 0.5rem 0.75rem; /* px-3 py-2 */
+        }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800">
+    <div id="app" class="container mx-auto p-4 md:p-8">
+        <header class="mb-8">
+            <h1 class="text-3xl font-bold text-gray-900">Dashboard de Controle de Produção</h1>
+            <p class="text-gray-600 mt-1">Gerencie o cadastro, progresso e pesos de produção das máquinas.</p>
+        </header>
+
+        <!-- Abas de Navegação -->
+        <div class="mb-6 border-b border-gray-200">
+            <nav class="flex flex-wrap -mb-px" aria-label="Tabs">
+                <button id="tab-btn-dashboard" class="tab-button active py-3 px-4 font-medium text-center text-gray-600 rounded-t-lg border-b-2 border-transparent hover:text-gray-700 hover:border-gray-300 transition-colors">Dashboard & Progresso</button>
+                <button id="tab-btn-lancamento" class="tab-button py-3 px-4 font-medium text-center text-gray-600 rounded-t-lg border-b-2 border-transparent hover:text-gray-700 hover:border-gray-300 transition-colors">Lançar & Editar Máquinas</button>
+            </nav>
+        </div>
+
+        <!-- Conteúdo das Abas -->
+        <main>
+            <!-- Aba Dashboard -->
+            <div id="tab-content-dashboard">
+                <div class="bg-white p-6 rounded-lg shadow-md">
+                    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-4">
+                        <h2 class="text-xl font-semibold">Acompanhamento de Progresso</h2>
+                        <div class="flex items-center space-x-2">
+                            <label for="date-selector" class="text-sm font-medium text-gray-700">Data:</label>
+                            <input type="date" id="date-selector" class="px-3 py-1 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                            <button id="global-analyze-crt-btn" class="px-3 py-1.5 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700">Gravar Dados</button>
+                        </div>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <!-- Novas 5 colunas congeladas e reordenadas -->
+                                    <th class="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider sticky-col sticky-header" style="left: 0px; min-width: 160px;">Nome da Obra</th>
+                                    <th class="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider sticky-col sticky-header" style="left: 160px; min-width: 120px;">Data Início</th>
+                                    <th class="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider sticky-col sticky-header" style="left: 280px; min-width: 100px;">Lote</th>
+                                    <th class="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider sticky-col sticky-header" style="left: 380px; min-width: 120px;">Documento</th>
+                                    <th class="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider sticky-col sticky-header" style="left: 500px; min-width: 160px;">Modelo</th>
+                                    <!-- Colunas restantes, não mais pegajosas aqui -->
+                                    <th class="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">CRT Prog.</th>
+                                    <th class="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">% Real</th>
+                                    <th class="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">CRT Real</th>
+                                    <!-- Headers Dinâmicos (Setores) -->
+                                    <th class="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Proj. Base (%)</th>
+                                    <th class="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Proj. Mec. (%)</th>
+                                    <th class="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Proj. Elétr. (%)</th>
+                                    <th class="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Proj. QL/QG (%)</th>
+                                    <th class="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Coletores (%)</th>
+                                    <th class="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Chassi (%)</th>
+                                    <th class="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Preparação chiller (%)</th>
+                                    <th class="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Pintura (%)</th>
+                                    <th class="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Compressor (%)</th>
+                                    <th class="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">CO2 (%)</th>
+                                    <th class="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Chiller (%)</th>
+                                    <th class="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Condensador (%)</th>
+                                    <th class="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Carenagem (%)</th>
+                                    <th class="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Fech. Mecânica (%)</th>
+                                    <th class="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Isolamento (%)</th>
+                                    <th class="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Prep. Elétr. Linha (%)</th>
+                                    <th class="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Prep. Elétr. Quadros (%)</th>
+                                    <th class="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Montagem Elétr. Quadros (%)</th>
+                                    <th class="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Fech. Elétr. Linha (%)</th>
+                                    <th class="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Montagem QCs (caixinhas) (%)</th>
+                                    <th class="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Progr (%)</th>
+                                    <th class="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Teste (%)</th>
+                                </tr>
+                            </thead>
+                            <tbody id="dashboard-table-body" class="bg-white divide-y divide-gray-200">
+                                <tr><td colspan="30" class="p-4 text-center text-gray-500">Carregando dados...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div id="crt-analysis-section" class="mt-8 bg-white p-6 rounded-lg shadow-md hidden">
+                    <h2 class="text-xl font-semibold mb-4">Análise Global de CRT Produzido</h2>
+                    <div id="crt-analysis-content" class="grid grid-cols-1 md:grid-cols-3 gap-4 text-center"></div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mt-8">
+                    <div class="bg-white p-6 rounded-lg shadow-md">
+                        <div class="flex justify-between items-center mb-4">
+                            <h3 class="text-lg font-semibold">CRT por Semana</h3>
+                            <div class="flex items-center space-x-2">
+                                <label for="weekly-summary-year" class="text-sm">Ano:</label>
+                                <input type="number" id="weekly-summary-year" class="w-24 px-2 py-1 border-gray-300 rounded-md">
+                            </div>
+                        </div>
+                        <div class="overflow-y-auto max-h-64">
+                            <table class="min-w-full">
+                                <thead class="bg-gray-50">
+                                    <tr>
+                                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Semana</th>
+                                        <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">CRT Produzido</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="weekly-summary-body"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="bg-white p-6 rounded-lg shadow-md">
+                        <div class="flex justify-between items-center mb-4">
+                            <h3 class="text-lg font-semibold">CRT por Dia</h3>
+                            <div class="flex items-center space-x-2">
+                                <label for="daily-summary-month" class="text-sm">Mês:</label>
+                                <input type="month" id="daily-summary-month" class="px-2 py-1 border-gray-300 rounded-md">
+                            </div>
+                        </div>
+                        <div class="overflow-y-auto max-h-64">
+                            <table class="min-w-full">
+                                <thead class="bg-gray-50">
+                                    <tr>
+                                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Dia</th>
+                                        <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">CRT Produzido</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="daily-summary-body"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Nova Tabela de CRT em Atraso -->
+                <div class="mt-8 bg-white p-6 rounded-lg shadow-md">
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="text-xl font-semibold">CRT em Atraso (por Semana Prevista)</h2>
+                        <div class="flex items-center space-x-2">
+                            <label for="overdue-summary-year" class="text-sm">Ano:</label>
+                            <input type="number" id="overdue-summary-year" class="w-24 px-2 py-1 border-gray-300 rounded-md">
+                        </div>
+                    </div>
+                    <div class="overflow-y-auto max-h-64">
+                        <table class="min-w-full">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Semana Prevista</th>
+                                    <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">CRT Faltante</th>
+                                </tr>
+                            </thead>
+                            <tbody id="overdue-crt-body"></tbody>
+                            <tfoot>
+                                <!-- Linha de total para CRT Faltante -->
+                                <tr class="bg-gray-100">
+                                    <td class="px-4 py-2 text-left text-sm font-semibold text-gray-800">Total CRT Faltante:</td>
+                                    <td id="total-overdue-crt" class="px-4 py-2 text-right text-sm font-bold text-red-700">0.00</td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Seção de Gráficos de CRT (Removida) -->
+                <!-- Nova seção para Gráficos de CRT -->
+                <div id="concluidas-section" class="mt-8 bg-white p-6 rounded-lg shadow-md">
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="text-xl font-semibold">Máquinas Concluídas</h2>
+                        <div class="flex items-center space-x-2">
+                            <label for="concluidas-year-filter" class="text-sm font-medium text-gray-700">Ano:</label>
+                            <input type="number" id="concluidas-year-filter" class="w-24 px-2 py-1 border-gray-300 rounded-md">
+                        </div>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Modelo</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Obra</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Lote</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data Início</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data Fim</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Dias Úteis</th>
+                                </tr>
+                            </thead>
+                            <tbody id="concluidas-table-body" class="bg-white divide-y divide-gray-200"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Aba Lançamento & Edição -->
+            <div id="tab-content-lancamento" class="hidden">
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    <div class="lg:col-span-1 bg-white p-6 rounded-lg shadow-md">
+                        <h2 id="form-title" class="text-xl font-semibold mb-4">Cadastrar Nova Máquina</h2>
+                        <form id="maquina-form" class="space-y-4">
+                            <input type="hidden" id="edit-id">
+                            <div>
+                                <label for="dataInicio" class="block text-sm font-medium text-gray-700">Data de Início</label>
+                                <input type="date" id="dataInicio" required class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                            </div>
+                            <div>
+                                <label for="dataFinalPlanejada" class="block text-sm font-medium text-gray-700">Data Final (Planejada)</label>
+                                <input type="date" id="dataFinalPlanejada" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                            </div>
+                            <div>
+                                <label for="nomeObra" class="block text-sm font-medium text-gray-700">Nome da Obra</label>
+                                <input type="text" id="nomeObra" placeholder="Nome do projeto ou cliente" required class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                            </div>
+                            <div>
+                                <label for="semanaInicio" class="block text-sm font-medium text-gray-700">Semana de Início</label>
+                                <input type="number" id="semanaInicio" placeholder="Ex: 25" required class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                            </div>
+                            <!-- Novo campo para Semana Término -->
+                            <div>
+                                <label for="semanaTermino" class="block text-sm font-medium text-gray-700">Semana Término</label>
+                                <input type="number" id="semanaTermino" placeholder="Preenchido automaticamente" class="mt-1 block w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" readonly>
+                            </div>
+                            <div>
+                                <label for="lote" class="block text-sm font-medium text-gray-700">Lote</label>
+                                <input type="text" id="lote" placeholder="Identificador do lote" required class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                            </div>
+                            <div>
+                                <label for="documento" class="block text-sm font-medium text-gray-700">Documento</label>
+                                <input type="text" id="documento" placeholder="Nota fiscal ou documento" required class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                            </div>
+                            <div>
+                                <label for="modelo" class="block text-sm font-medium text-gray-700">Modelo de Equipamento</label>
+                                <select id="modelo" required class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md">
+                                    <option value="">Selecione um modelo</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label for="crt" class="block text-sm font-medium text-gray-700">CRT (Peso)</label>
+                                <input type="number" id="crt" placeholder="Padrão do modelo, pode ser alterado" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                            </div>
+
+                            <!-- Novo campo para Pesos por Setor -->
+                            <div class="space-y-2">
+                                <details class="group">
+                                    <summary class="flex justify-between items-center cursor-pointer text-sm font-medium text-gray-700">
+                                        Pesos por Setor para o CRT (%)
+                                        <span class="ml-2 group-open:rotate-90 transition-transform">
+                                            <svg class="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+                                        </span>
+                                    </summary>
+                                    <div id="sector-weights-inputs" class="grid grid-cols-2 gap-4 mt-2 p-3 bg-gray-50 rounded-md border border-gray-200">
+                                        <!-- Inputs gerados via JS -->
+                                    </div>
+                                    <div class="mt-2 text-right text-sm font-semibold text-gray-700">
+                                        Soma dos Pesos: <span id="total-sector-weight">0</span>%
+                                    </div>
+                                    <p id="sector-weight-error" class="text-red-600 text-xs mt-1 hidden">A soma dos pesos deve ser 100%.</p>
+                                </details>
+                            </div>
+
+                            <div class="flex space-x-2 pt-2">
+                                <button type="submit" class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">Salvar</button>
+                                <button type="button" id="cancel-edit-btn" class="w-full flex justify-center py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 hidden">Cancelar</button>
+                            </div>
+                        </form>
+                    </div>
+                    <div class="lg:col-span-2 bg-white p-6 rounded-lg shadow-md">
+                        <h2 class="text-xl font-semibold mb-4">Máquinas Cadastradas</h2>
+                        <div class="overflow-x-auto">
+                            <table class="min-w-full divide-y divide-gray-200">
+                                <thead class="bg-gray-50">
+                                    <tr>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Documento</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Lote</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nome da Obra</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Semana Início</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">CRT</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="lancamento-table-body" class="bg-white divide-y divide-gray-200">
+                                    <tr><td colspan="6" class="p-4 text-center text-gray-500">Nenhuma máquina cadastrada.</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                <!-- Nova seção para Modelos com Pesos de Setor Lançados -->
+                <div class="mt-8 bg-white p-6 rounded-lg shadow-md w-full">
+                    <h2 class="text-xl font-semibold mb-4">Modelos com Pesos de Setor Lançados</h2>
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Modelo</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">CRT Padrão</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Soma Pesos (%)</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody id="models-with-weights-table-body" class="bg-white divide-y divide-gray-200">
+                                <tr><td colspan="4" class="p-4 text-center text-gray-500">Nenhum modelo com pesos de setor lançados.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modais -->
+    <div id="delete-modal" class="modal-backdrop hidden">
+        <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-sm mx-auto">
+            <h3 class="text-lg font-medium text-gray-900">Confirmar Exclusão</h3>
+            <p class="mt-2 text-sm text-gray-600">Tem certeza que deseja excluir esta máquina? Esta ação não pode ser desfeita.</p>
+            <div class="mt-4 flex justify-end space-x-3">
+                <button id="cancel-delete-btn" class="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300">Cancelar</button>
+                <button id="confirm-delete-btn" class="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700">Excluir</button>
+            </div>
+        </div>
+    </div>
+    <div id="duplicate-doc-modal" class="modal-backdrop hidden">
+        <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-md mx-auto">
+            <h3 class="text-lg font-medium text-gray-900">Documento Duplicado</h3>
+            <p class="mt-2 text-sm text-gray-600">Este número de documento já existe no sistema. Deseja mesmo cadastrar esta máquina com um documento repetido?</p>
+            <div class="mt-4 flex justify-end space-x-3">
+                <button id="cancel-duplicate-btn" class="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300">Cancelar</button>
+                <button id="confirm-duplicate-btn" class="px-4 py-2 bg-orange-500 text-white rounded-md hover:bg-orange-600">Sim, Cadastrar Mesmo Assim</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getFirestore, collection, addDoc, onSnapshot, doc, updateDoc, deleteDoc, query, setDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+
+        // Define a configuração do Firebase com as credenciais do seu projeto "producaoracks"
+        // Este é o método recomendado para uso em produção (Firebase Hosting), após obter suas credenciais reais.
+        const firebaseConfig = {
+            apiKey: "AIzaSyA2KkMNe5h4zW4Dq9aHmENg7y-yqlRIzy8",
+            authDomain: "producaoracks.firebaseapp.com",
+            projectId: "producaoracks",
+            storageBucket: "producaoracks.firebasestorage.app",
+            messagingSenderId: "328827034596",
+            appId: "1:328827034596:web:4e1b4db4fdcca0aab8c5f1"
+        };
+        // O appId para as coleções do Firestore será o projectId do Firebase
+        const appId = firebaseConfig.projectId;
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const auth = getAuth(app);
+
+        // Dados estáticos para equipamentos, usados para preencher o select de modelos e seus CRT padrão
+        const equipamentosData = [
+            { nome: "Chassi especial", crt: 30 },
+            { nome: "CHILLER", crt: 55 },
+            { nome: "CHILLER Carenado", crt: 72 },
+            { nome: "CHPA", crt: 90 },
+            { nome: "CHPA 2v", crt: 72 },
+            { nome: "CHPA 4v", crt: 78 },
+            { nome: "Condens. SK", crt: 35 },
+            { nome: "Cool 2v", crt: 72 },
+            { nome: "Cool 4v", crt: 78 },
+            { nome: "Dessup ar p/ CO2", crt: 15 },
+            { nome: "ECO 1CP", crt: 55 },
+            { nome: "ECO 2CP", crt: 65 },
+            { nome: "ECO 3CP", crt: 70 },
+            { nome: "ECO2P", crt: 35 },
+            { nome: "ECO2P SH", crt: 38 },
+            { nome: "ECO2P zov38", crt: 40 },
+            { nome: "ECOP", crt: 28 },
+            { nome: "EP 500 1v", crt: 60 },
+            { nome: "EP 500 2v 2Sh", crt: 65 },
+            { nome: "EP 500 2v 3Sh", crt: 70 },
+            { nome: "EP 500 2v Sc", crt: 65 },
+            { nome: "EP 710 2v", crt: 105 },
+            { nome: "EP 710 3v", crt: 120 },
+            { nome: "EP 710 4v", crt: 130 },
+            { nome: "Housing", crt: 45 },
+            { nome: "MR 2", crt: 70 },
+            { nome: "MR 2+2", crt: 90 },
+            { nome: "MR 3", crt: 75 },
+            { nome: "MR 3+2", crt: 95 },
+            { nome: "MR 3+3", crt: 100 },
+            { nome: "MR 4", crt: 80 },
+            { nome: "MR 4+3", crt: 105 },
+            { nome: "MR 4+4", crt: 110 },
+            { nome: "MR 5", crt: 85 },
+            { nome: "Painel de linhas especial", crt: 35 },
+            { nome: "PR 2+2", crt: 110 },
+            { nome: "PR 2+2 CH", crt: 145 },
+            { nome: "PR 2+2 CH2", crt: 160 },
+            { nome: "PR 2+2 CO2", crt: 185 },
+            { nome: "PR 2+2 CO2 4cil", crt: 215 },
+            { nome: "PR 3", crt: 95 },
+            { nome: "PR 3 CH", crt: 130 },
+            { nome: "PR 3 CO2", crt: 160 },
+            { nome: "PR 3 CO2 4cil", crt: 190 },
+            { nome: "PR 3 CRT Off", crt: 0.00001 },
+            { nome: "PR 3+2", crt: 115 },
+            { nome: "PR 3+2 CH", crt: 150 },
+            { nome: "PR 3+2 CH2", crt: 165 },
+            { nome: "PR 3+3", crt: 120 },
+            { nome: "PR 3+3 CH", crt: 155 },
+            { nome: "PR 3+3 CH2", crt: 170 },
+            { nome: "PR 3+3 CO2", crt: 195 },
+            { nome: "PR 3+3 CO2 4cil", crt: 225 },
+            { nome: "PR 4", crt: 100 },
+            { nome: "PR 4 CH", crt: 135 },
+            { nome: "PR 4 CH2", crt: 150 },
+            { nome: "PR 4 CO2 4cil", crt: 210 },
+            { nome: "PR 4 PARAF", crt: 135 },
+            { nome: "PR 4 PARAF CH", crt: 170 },
+            { nome: "PR 4+2 CO2", crt: 195 },
+            { nome: "PR 4+2 CO2 4cil", crt: 225 },
+            { nome: "PR 4+2 CO2 CH", crt: 235 },
+            { nome: "PR 4+3", crt: 125 },
+            { nome: "PR 4+3 CH", crt: 165 },
+            { nome: "PR 4+3 CH2", crt: 175 },
+            { nome: "PR 4+3 CO2", crt: 205 },
+            { nome: "PR 4+3 CO2 4cil", crt: 235 },
+            { nome: "PR 4+3 CO2 CH", crt: 240 },
+            { nome: "PR 4+3 CO2 CH2", crt: 250 },
+            { nome: "PR 4+4", crt: 130 },
+            { nome: "PR 4+4 CH", crt: 170 },
+            { nome: "PR 4+4 CH2", crt: 180 },
+            { nome: "PR 4+4 CO2", crt: 210 },
+            { nome: "PR 4+4 CO2 4cil", crt: 240 },
+            { nome: "PR 4+4 CO2 CH", crt: 245 },
+            { nome: "PR 4+4 CO2 CH2", crt: 255 },
+            { nome: "PR 5", crt: 105 },
+            { nome: "PR 5 CH", crt: 145 },
+            { nome: "PR 5 CH2", crt: 155 },
+            { nome: "PR 6", crt: 110 },
+            { nome: "PR 6 CH", crt: 150 },
+            { nome: "PR 6 CH2", crt: 160 },
+            { nome: "PR 6+3 CO2", crt: 225 },
+            { nome: "PR 6+3 CO2 4cil", crt: 265 },
+            { nome: "PR 6+3 CO2 CH", crt: 260 },
+            { nome: "PR 6+3 CO2 CH2", crt: 270 },
+            { nome: "PR 6+4 CO2", crt: 230 },
+            { nome: "PR 6+4 CO2 4cil", crt: 270 },
+            { nome: "PR 6+4 CO2 CH", crt: 265 },
+            { nome: "PR 6+4 CO2 CH2", crt: 340 },
+            { nome: "UC", crt: 40 },
+            { nome: "WM QE´S", crt: 50 }, // Vírgula adicionada aqui
+            // Novas máquinas adicionadas aqui
+            { nome: "PR 8", crt: 120 },
+            { nome: "PR CO2", crt: 95 },
+            { nome: "PRO 12v", crt: 310 },
+            { nome: "PRO 4v", crt: 140 },
+            { nome: "PRO 8v", crt: 230 },
+            { nome: "PRO M 2v", crt: 90 },
+            { nome: "PRO M 4v", crt: 98 },
+            { nome: "Q.Condens.", crt: 25 },
+            { nome: "Q.Linhas", crt: 20 },
+            { nome: "Q.Linhas grande", crt: 30 },
+            { nome: "Q.Linhas médio", crt: 20 },
+            { nome: "Q.Linhas peq", crt: 10 },
+            { nome: "Q.Partida", crt: 20 },
+            { nome: "QE Grande", crt: 30 },
+            { nome: "QL", crt: 20 },
+            { nome: "QL GR", crt: 40 },
+            { nome: "QL MÉD", crt: 20 },
+            { nome: "QL PEQ", crt: 10 },
+            { nome: "Rack 2 bombas", crt: 25 },
+            { nome: "Rack 3 bombas", crt: 40 },
+            { nome: "Rack 4 ou 5 bombas", crt: 60 },
+            { nome: "Rack bombas", crt: 30 },
+            { nome: "RH 2+2 CH", crt: 310 },
+            { nome: "RH 2+2 CH 4+4 2CO2", crt: 500 },
+            { nome: "RH 2+2 CH 6+6 2CO2", crt: 520 },
+            { nome: "RH 2+2+3 CO2 4cil CH", crt: 410 },
+            { nome: "RH 2+2+3 CO2 CH", crt: 410 },
+            { nome: "RH 3+3", crt: 270 },
+            { nome: "RH 4+4", crt: 290 },
+            { nome: "RH 4+4 2CO2", crt: 350 },
+            { nome: "RH 4+4 2CO2 4cil", crt: 350 },
+            { nome: "RH 4+4 CH", crt: 330 },
+            { nome: "RH 4+4 CO2", crt: 340 },
+            { nome: "RH 4+4 CO2 4cil", crt: 340 },
+            { nome: "RH 4+4+3 CO2 4cil CH", crt: 450 },
+            { nome: "RH 4+4+3 CO2 CH", crt: 450 },
+            { nome: "RH 4+6 CH", crt: 340 },
+            { nome: "RH 6+6 2CO2", crt: 390 },
+            { nome: "RH 6+6 2CO2 4cil", crt: 390 },
+            { nome: "SK 2+2", crt: 150 },
+            { nome: "SK 2+2 CH", crt: 195 },
+            { nome: "SK 2+2 CH2", crt: 205 },
+            { nome: "SK 3", crt: 140 },
+            { nome: "SK 3 CH", crt: 180 },
+            { nome: "SK 3+2", crt: 155 },
+            { nome: "SK 3+2 CH", crt: 200 },
+            { nome: "SK 3+2 CH2", crt: 210 },
+            { nome: "SK 3+3", crt: 160 },
+            { nome: "SK 3+3 CH", crt: 205 },
+            { nome: "SK 3+3 CH2", crt: 215 },
+            { nome: "SK 4", crt: 145 },
+            { nome: "SK 4 CH", crt: 185 },
+            { nome: "SK 4+2 CO2", crt: 265 },
+            { nome: "SK 4+2 CO2 4cil", crt: 295 },
+            { nome: "SK 4+2 CO2 CH", crt: 300 },
+            { nome: "SK 4+2 CO2 CH s/ CD", crt: 275 },
+            { nome: "SK 4+2 CO2 CH2", crt: 315 },
+            { nome: "SK 4+3 CH", crt: 210 },
+            { nome: "SK 4+3 CH2", crt: 220 },
+            { nome: "SK 4+3 CO2", crt: 270 },
+            { nome: "SK 4+3 CO2 4cil", crt: 305 },
+            { nome: "SK 4+3 CO2 CH", crt: 310 },
+            { nome: "SK 4+3 CO2 CH2", crt: 320 },
+            { nome: "SK 4+4 CH", crt: 215 },
+            { nome: "SK 4+4 CH2", crt: 225 },
+            { nome: "SK 4+4 CO2", crt: 275 },
+            { nome: "SK 4+4 CO2 4cil", crt: 310 },
+            { nome: "SK 4+4 CO2 CH", crt: 315 },
+            { nome: "SK 4+4 CO2 CH2", crt: 325 },
+            { nome: "SK 5", crt: 155 },
+            { nome: "SK 5 CH", crt: 190 },
+            { nome: "SK 6", crt: 160 },
+            { nome: "SK 6 CH", crt: 195 },
+            { nome: "SK 6+3 CO2", crt: 290 },
+            { nome: "SK 6+3 CO2 4cil", crt: 325 },
+            { nome: "SK 6+3 CO2 CH", crt: 330 },
+            { nome: "SK 6+3 CO2 CH2", crt: 330 },
+            { nome: "SK 6+4 CO2", crt: 295 },
+            { nome: "SK 6+4 CO2 4cil", crt: 335 },
+            { nome: "SK 6+4 CO2 CH", crt: 335 },
+            { nome: "SK 6+4 CO2 CH2", crt: 340 }
+        ];
+
+        // Definindo os pesos para os novos modelos.
+        // O nome da chave deve corresponder ao "nome" do equipamento na lista acima.
+        const novosPesosPorSetor = {
+            "PR 8": {
+                projBase: 0, projMec: 0, projEletr: 0, projQlQg: 0,
+                coletores: 2, chassi: 3, preparacaoChiller: 0, pintura: 0,
+                compressor: 15, co2: 0, chiller: 0, condensador: 0, carenagem: 0,
+                fechMecanica: 20, isolamento: 10, prepEletrLinha: 3,
+                prepEletrQuadros: 2, montagemEletrQuadros: 25,
+                fechEletrLinha: 15, montagemQcs: 0, progr: 0, teste: 5
+            },
+            "PR CO2": {
+                projBase: 0, projMec: 0, projEletr: 0, projQlQg: 0,
+                coletores: 2, chassi: 3, preparacaoChiller: 0, pintura: 0,
+                compressor: 10, co2: 20, chiller: 0, condensador: 0, carenagem: 0,
+                fechMecanica: 5, isolamento: 10, prepEletrLinha: 3,
+                prepEletrQuadros: 2, montagemEletrQuadros: 25,
+                fechEletrLinha: 15, montagemQcs: 0, progr: 0, teste: 5
+            },
+            "PRO 12v": {
+                projBase: 0, projMec: 0, projEletr: 0, projQlQg: 0,
+                coletores: 1, chassi: 3, preparacaoChiller: 1, pintura: 0,
+                compressor: 15, co2: 0, chiller: 10, condensador: 6, carenagem: 5,
+                fechMecanica: 1, isolamento: 8, prepEletrLinha: 2,
+                prepEletrQuadros: 2, montagemEletrQuadros: 25,
+                fechEletrLinha: 16, montagemQcs: 0, progr: 0, teste: 5
+            },
+            "PRO 4v": {
+                projBase: 0, projMec: 0, projEletr: 0, projQlQg: 0,
+                coletores: 1, chassi: 3, preparacaoChiller: 1, pintura: 0,
+                compressor: 15, co2: 0, chiller: 10, condensador: 6, carenagem: 5,
+                fechMecanica: 1, isolamento: 8, prepEletrLinha: 2,
+                prepEletrQuadros: 2, montagemEletrQuadros: 25,
+                fechEletrLinha: 16, montagemQcs: 0, progr: 0, teste: 5
+            },
+            "PRO 8v": {
+                projBase: 0, projMec: 0, projEletr: 0, projQlQg: 0,
+                coletores: 1, chassi: 3, preparacaoChiller: 1, pintura: 0,
+                compressor: 15, co2: 0, chiller: 10, condensador: 6, carenagem: 5,
+                fechMecanica: 1, isolamento: 8, prepEletrLinha: 2,
+                prepEletrQuadros: 2, montagemEletrQuadros: 25,
+                fechEletrLinha: 16, montagemQcs: 0, progr: 0, teste: 5
+            },
+            "PRO M 2v": {
+                projBase: 0, projMec: 0, projEletr: 0, projQlQg: 0,
+                coletores: 1, chassi: 3, preparacaoChiller: 1, pintura: 0,
+                compressor: 15, co2: 0, chiller: 10, condensador: 6, carenagem: 5,
+                fechMecanica: 1, isolamento: 8, prepEletrLinha: 2,
+                prepEletrQuadros: 2, montagemEletrQuadros: 25,
+                fechEletrLinha: 16, montagemQcs: 0, progr: 0, teste: 5
+            },
+            "PRO M 4v": {
+                projBase: 0, projMec: 0, projEletr: 0, projQlQg: 0,
+                coletores: 1, chassi: 3, preparacaoChiller: 1, pintura: 0,
+                compressor: 15, co2: 0, chiller: 10, condensador: 6, carenagem: 5,
+                fechMecanica: 1, isolamento: 8, prepEletrLinha: 2,
+                prepEletrQuadros: 2, montagemEletrQuadros: 25,
+                fechEletrLinha: 16, montagemQcs: 0, progr: 0, teste: 5
+            },
+            "Q.Condens.": {
+                projBase: 0, projMec: 0, projEletr: 0, projQlQg: 0,
+                coletores: 0, chassi: 0, preparacaoChiller: 0, pintura: 0,
+                compressor: 0, co2: 0, chiller: 0, condensador: 0, carenagem: 0,
+                fechMecanica: 0, isolamento: 0, prepEletrLinha: 15,
+                prepEletrQuadros: 80, montagemEletrQuadros: 0,
+                fechEletrLinha: 0, montagemQcs: 0, progr: 0, teste: 5
+            },
+            "Q.Linhas": {
+                projBase: 0, projMec: 0, projEletr: 0, projQlQg: 0,
+                coletores: 0, chassi: 0, preparacaoChiller: 0, pintura: 0,
+                compressor: 0, co2: 0, chiller: 0, condensador: 0, carenagem: 0,
+                fechMecanica: 0, isolamento: 0, prepEletrLinha: 15,
+                prepEletrQuadros: 80, montagemEletrQuadros: 0,
+                fechEletrLinha: 0, montagemQcs: 0, progr: 0, teste: 5
+            },
+            "Q.Linhas grande": {
+                projBase: 0, projMec: 0, projEletr: 0, projQlQg: 0,
+                coletores: 0, chassi: 0, preparacaoChiller: 0, pintura: 0,
+                compressor: 0, co2: 0, chiller: 0, condensador: 0, carenagem: 0,
+                fechMecanica: 0, isolamento: 0, prepEletrLinha: 15,
+                prepEletrQuadros: 80, montagemEletrQuadros: 0,
+                fechEletrLinha: 0, montagemQcs: 0, progr: 0, teste: 5
+            },
+            "Q.Linhas médio": {
+                projBase: 0, projMec: 0, projEletr: 0, projQlQg: 0,
+                coletores: 0, chassi: 0, preparacaoChiller: 0, pintura: 0,
+                compressor: 0, co2: 0, chiller: 0, condensador: 0, carenagem: 0,
+                fechMecanica: 0, isolamento: 0, prepEletrLinha: 15,
+                prepEletrQuadros: 80, montagemEletrQuadros: 0,
+                fechEletrLinha: 0, montagemQcs: 0, progr: 0, teste: 5
+            },
+            "Q.Linhas peq": {
+                projBase: 0, projMec: 0, projEletr: 0, projQlQg: 0,
+                coletores: 0, chassi: 0, preparacaoChiller: 0, pintura: 0,
+                compressor: 0, co2: 0, chiller: 0, condensador: 0, carenagem: 0,
+                fechMecanica: 0, isolamento: 0, prepEletrLinha: 15,
+                prepEletrQuadros: 80, montagemEletrQuadros: 0,
+                fechEletrLinha: 0, montagemQcs: 0, progr: 0, teste: 5
+            },
+            "Q.Partida": {
+                projBase: 0, projMec: 0, projEletr: 0, projQlQg: 0,
+                coletores: 0, chassi: 0, preparacaoChiller: 0, pintura: 0,
+                compressor: 0, co2: 0, chiller: 0, condensador: 0, carenagem: 0,
+                fechMecanica: 0, isolamento: 0, prepEletrLinha: 15,
+                prepEletrQuadros: 80, montagemEletrQuadros: 0,
+                fechEletrLinha: 0, montagemQcs: 0, progr: 0, teste: 5
+            },
+            "QE Grande": {
+                projBase: 0, projMec: 0, projEletr: 0, projQlQg: 0,
+                coletores: 0, chassi: 0, preparacaoChiller: 0, pintura: 0,
+                compressor: 0, co2: 0, chiller: 0, condensador: 0, carenagem: 0,
+                fechMecanica: 0, isolamento: 0, prepEletrLinha: 15,
+                prepEletrQuadros: 80, montagemEletrQuadros: 0,
+                fechEletrLinha: 0, montagemQcs: 0, progr: 0, teste: 5
+            },
+            "QL": {
+                projBase: 0, projMec: 0, projEletr: 0, projQlQg: 0,
+                coletores: 0, chassi: 0, preparacaoChiller: 0, pintura: 0,
+                compressor: 0, co2: 0, chiller: 0, condensador: 0, carenagem: 0,
+                fechMecanica: 0, isolamento: 0, prepEletrLinha: 15,
+                prepEletrQuadros: 80, montagemEletrQuadros: 0,
+                fechEletrLinha: 0, montagemQcs: 0, progr: 0, teste: 5
+            },
+            "QL GR": {
+                projBase: 0, projMec: 0, projEletr: 0, projQlQg: 0,
+                coletores: 0, chassi: 0, preparacaoChiller: 0, pintura: 0,
+                compressor: 0, co2: 0, chiller: 0, condensador: 0, carenagem: 0,
+                fechMecanica: 0, isolamento: 0, prepEletrLinha: 15,
+                prepEletrQuadros: 80, montagemEletrQuadros: 0,
+                fechEletrLinha: 0, montagemQcs: 0, progr: 0, teste: 5
+            },
+            "QL MÉD": {
+                projBase: 0, projMec: 0, projEletr: 0, projQlQg: 0,
+                coletores: 0, chassi: 0, preparacaoChiller: 0, pintura: 0,
+                compressor: 0, co2: 0, chiller: 0, condensador: 0, carenagem: 0,
+                fechMecanica: 0, isolamento: 0, prepEletrLinha: 15,
+                prepEletrQuadros: 80, montagemEletrQuadros: 0,
+                fechEletrLinha: 0, montagemQcs: 0, progr: 0, teste: 5
+            },
+            "QL PEQ": {
+                projBase: 0, projMec: 0, projEletr: 0, projQlQg: 0,
+                coletores: 0, chassi: 0, preparacaoChiller: 0, pintura: 0,
+                compressor: 0, co2: 0, chiller: 0, condensador: 0, carenagem: 0,
+                fechMecanica: 0, isolamento: 0, prepEletrLinha: 15,
+                prepEletrQuadros: 80, montagemEletrQuadros: 0,
+                fechEletrLinha: 0, montagemQcs: 0, progr: 0, teste: 5
+            },
+            "Rack 2 bombas": {
+                projBase: 0, projMec: 0, projEletr: 0, projQlQg: 0,
+                coletores: 0, chassi: 8, preparacaoChiller: 10, pintura: 0,
+                compressor: 0, co2: 0, chiller: 32, condensador: 0, carenagem: 0,
+                fechMecanica: 0, isolamento: 10, prepEletrLinha: 3,
+                prepEletrQuadros: 2, montagemEletrQuadros: 20,
+                fechEletrLinha: 10, montagemQcs: 0, progr: 0, teste: 5
+            },
+            "Rack 3 bombas": {
+                projBase: 0, projMec: 0, projEletr: 0, projQlQg: 0,
+                coletores: 0, chassi: 8, preparacaoChiller: 10, pintura: 0,
+                compressor: 0, co2: 0, chiller: 32, condensador: 0, carenagem: 0,
+                fechMecanica: 0, isolamento: 10, prepEletrLinha: 3,
+                prepEletrQuadros: 2, montagemEletrQuadros: 20,
+                fechEletrLinha: 10, montagemQcs: 0, progr: 0, teste: 5
+            },
+            "Rack 4 ou 5 bombas": {
+                projBase: 0, projMec: 0, projEletr: 0, projQlQg: 0,
+                coletores: 0, chassi: 8, preparacaoChiller: 10, pintura: 0,
+                compressor: 0, co2: 0, chiller: 32, condensador: 0, carenagem: 0,
+                fechMecanica: 0, isolamento: 10, prepEletrLinha: 3,
+                prepEletrQuadros: 2, montagemEletrQuadros: 20,
+                fechEletrLinha: 10, montagemQcs: 0, progr: 0, teste: 5
+            },
+            "Rack bombas": {
+                projBase: 0, projMec: 0, projEletr: 0, projQlQg: 0,
+                coletores: 0, chassi: 8, preparacaoChiller: 10, pintura: 0,
+                compressor: 0, co2: 0, chiller: 32, condensador: 0, carenagem: 0,
+                fechMecanica: 0, isolamento: 10, prepEletrLinha: 3,
+                prepEletrQuadros: 2, montagemEletrQuadros: 20,
+                fechEletrLinha: 10, montagemQcs: 0, progr: 0, teste: 5
+            },
+            "RH 2+2 CH": {
+                projBase: 0, projMec: 0, projEletr: 0, projQlQg: 0,
+                coletores: 1, chassi: 2, preparacaoChiller: 2, pintura: 0,
+                compressor: 8, co2: 0, chiller: 8, condensador: 0, carenagem: 8,
+                fechMecanica: 13, isolamento: 8, prepEletrLinha: 3,
+                prepEletrQuadros: 2, montagemEletrQuadros: 20,
+                fechEletrLinha: 20, montagemQcs: 0, progr: 0, teste: 5
+            },
+            "RH 2+2 CH 4+4 2CO2": {
+                projBase: 0, projMec: 0, projEletr: 0, projQlQg: 0,
+                coletores: 1, chassi: 2, preparacaoChiller: 2, pintura: 0,
+                compressor: 7, co2: 7, chiller: 4, condensador: 0, carenagem: 7,
+                fechMecanica: 12, isolamento: 8, prepEletrLinha: 3,
+                prepEletrQuadros: 2, montagemEletrQuadros: 20,
+                fechEletrLinha: 20, montagemQcs: 0, progr: 0, teste: 5
+            },
+            "RH 2+2 CH 6+6 2CO2": {
+                projBase: 0, projMec: 0, projEletr: 0, projQlQg: 0,
+                coletores: 1, chassi: 2, preparacaoChiller: 2, pintura: 0,
+                compressor: 7, co2: 7, chiller: 4, condensador: 0, carenagem: 7,
+                fechMecanica: 12, isolamento: 8, prepEletrLinha: 3,
+                prepEletrQuadros: 2, montagemEletrQuadros: 20,
+                fechEletrLinha: 20, montagemQcs: 0, progr: 0, teste: 5
+            },
+            "RH 2+2+3 CO2 4cil CH": {
+                projBase: 0, projMec: 0, projEletr: 0, projQlQg: 0,
+                coletores: 1, chassi: 2, preparacaoChiller: 2, pintura: 0,
+                compressor: 6, co2: 7, chiller: 5, condensador: 0, carenagem: 7,
+                fechMecanica: 12, isolamento: 8, prepEletrLinha: 3,
+                prepEletrQuadros: 2, montagemEletrQuadros: 20,
+                fechEletrLinha: 20, montagemQcs: 0, progr: 0, teste: 5
+            },
+            "RH 2+2+3 CO2 CH": {
+                projBase: 0, projMec: 0, projEletr: 0, projQlQg: 0,
+                coletores: 1, chassi: 2, preparacaoChiller: 2, pintura: 0,
+                compressor: 6, co2: 7, chiller: 5, condensador: 0, carenagem: 7,
+                fechMecanica: 12, isolamento: 8, prepEletrLinha: 3,
+                prepEletrQuadros: 2, montagemEletrQuadros: 20,
+                fechEletrLinha: 20, montagemQcs: 0, progr: 0, teste: 5
+            },
+            "RH 3+3": {
+                projBase: 0, projMec: 0, projEletr: 0, projQlQg: 0,
+                coletores: 2, chassi: 3, preparacaoChiller: 0, pintura: 0,
+                compressor: 10, co2: 0, chiller: 0, condensador: 0, carenagem: 10,
+                fechMecanica: 15, isolamento: 10, prepEletrLinha: 3,
+                prepEletrQuadros: 2, montagemEletrQuadros: 20,
+                fechEletrLinha: 20, montagemQcs: 0, progr: 0, teste: 5
+            },
+            "RH 4+4": {
+                projBase: 0, projMec: 0, projEletr: 0, projQlQg: 0,
+                coletores: 2, chassi: 3, preparacaoChiller: 0, pintura: 0,
+                compressor: 10, co2: 0, chiller: 0, condensador: 0, carenagem: 10,
+                fechMecanica: 15, isolamento: 10, prepEletrLinha: 3,
+                prepEletrQuadros: 2, montagemEletrQuadros: 20,
+                fechEletrLinha: 20, montagemQcs: 0, progr: 0, teste: 5
+            },
+            "RH 4+4 2CO2": {
+                projBase: 0, projMec: 0, projEletr: 0, projQlQg: 0,
+                coletores: 2, chassi: 3, preparacaoChiller: 0, pintura: 0,
+                compressor: 9, co2: 9, chiller: 0, condensador: 0, carenagem: 7,
+                fechMecanica: 12, isolamento: 8, prepEletrLinha: 3,
+                prepEletrQuadros: 2, montagemEletrQuadros: 20,
+                fechEletrLinha: 20, montagemQcs: 0, progr: 0, teste: 5
+            },
+            "RH 4+4 2CO2 4cil": {
+                projBase: 0, projMec: 0, projEletr: 0, projQlQg: 0,
+                coletores: 2, chassi: 3, preparacaoChiller: 0, pintura: 0,
+                compressor: 9, co2: 9, chiller: 0, condensador: 0, carenagem: 7,
+                fechMecanica: 12, isolamento: 8, prepEletrLinha: 3,
+                prepEletrQuadros: 2, montagemEletrQuadros: 20,
+                fechEletrLinha: 20, montagemQcs: 0, progr: 0, teste: 5
+            },
+            "RH 4+4 CH": {
+                projBase: 0, projMec: 0, projEletr: 0, projQlQg: 0,
+                coletores: 1, chassi: 2, preparacaoChiller: 2, pintura: 0,
+                compressor: 8, co2: 0, chiller: 8, condensador: 0, carenagem: 8,
+                fechMecanica: 13, isolamento: 8, prepEletrLinha: 3,
+                prepEletrQuadros: 2, montagemEletrQuadros: 20,
+                fechEletrLinha: 20, montagemQcs: 0, progr: 0, teste: 5
+            },
+            "RH 4+4 CO2": {
+                projBase: 0, projMec: 0, projEletr: 0, projQlQg: 0,
+                coletores: 2, chassi: 3, preparacaoChiller: 0, pintura: 0,
+                compressor: 9, co2: 9, chiller: 0, condensador: 0, carenagem: 7,
+                fechMecanica: 12, isolamento: 8, prepEletrLinha: 3,
+                prepEletrQuadros: 2, montagemEletrQuadros: 20,
+                fechEletrLinha: 20, montagemQcs: 0, progr: 0, teste: 5
+            },
+            "RH 4+4 CO2 4cil": {
+                projBase: 0, projMec: 0, projEletr: 0, projQlQg: 0,
+                coletores: 2, chassi: 3, preparacaoChiller: 0, pintura: 0,
+                compressor: 9, co2: 9, chiller: 0, condensador: 0, carenagem: 7,
+                fechMecanica: 12, isolamento: 8, prepEletrLinha: 3,
+                prepEletrQuadros: 2, montagemEletrQuadros: 20,
+                fechEletrLinha: 20, montagemQcs: 0, progr: 0, teste: 5
+            },
+            "RH 4+4+3 CO2 4cil CH": {
+                projBase: 0, projMec: 0, projEletr: 0, projQlQg: 0,
+                coletores: 1, chassi: 2, preparacaoChiller: 2, pintura: 0,
+                compressor: 7, co2: 7, chiller: 4, condensador: 0, carenagem: 7,
+                fechMecanica: 12, isolamento: 8, prepEletrLinha: 3,
+                prepEletrQuadros: 2, montagemEletrQuadros: 20,
+                fechEletrLinha: 20, montagemQcs: 0, progr: 0, teste: 5
+            },
+            "RH 4+4+3 CO2 CH": {
+                projBase: 0, projMec: 0, projEletr: 0, projQlQg: 0,
+                coletores: 1, chassi: 2, preparacaoChiller: 2, pintura: 0,
+                compressor: 7, co2: 7, chiller: 4, condensador: 0, carenagem: 7,
+                fechMecanica: 12, isolamento: 8, prepEletrLinha: 3,
+                prepEletrQuadros: 2, montagemEletrQuadros: 20,
+                fechEletrLinha: 20, montagemQcs: 0, progr: 0, teste: 5
+            },
+            "RH 4+6 CH": {
+                projBase: 0, projMec: 0, projEletr: 0, projQlQg: 0,
+                coletores: 1, chassi: 2, preparacaoChiller: 2, pintura: 0,
+                compressor: 7, co2: 7, chiller: 4, condensador: 0, carenagem: 7,
+                fechMecanica: 12, isolamento: 8, prepEletrLinha: 3,
+                prepEletrQuadros: 2, montagemEletrQuadros: 20,
+                fechEletrLinha: 20, montagemQcs: 0, progr: 0, teste: 5
+            },
+            "RH 6+6 2CO2": {
+                projBase: 0, projMec: 0, projEletr: 0, projQlQg: 0,
+                coletores: 2, chassi: 3, preparacaoChiller: 0, pintura: 0,
+                compressor: 9, co2: 9, chiller: 0, condensador: 0, carenagem: 7,
+                fechMecanica: 12, isolamento: 8, prepEletrLinha: 3,
+                prepEletrQuadros: 2, montagemEletrQuadros: 20,
+                fechEletrLinha: 20, montagemQcs: 0, progr: 0, teste: 5
+            },
+            "RH 6+6 2CO2 4cil": {
+                projBase: 0, projMec: 0, projEletr: 0, projQlQg: 0,
+                coletores: 2, chassi: 3, preparacaoChiller: 0, pintura: 0,
+                compressor: 9, co2: 9, chiller: 0, condensador: 0, carenagem: 7,
+                fechMecanica: 12, isolamento: 8, prepEletrLinha: 3,
+                prepEletrQuadros: 2, montagemEletrQuadros: 20,
+                fechEletrLinha: 20, montagemQcs: 0, progr: 0, teste: 5
+            },
+            "SK 2+2": {
+                projBase: 0, projMec: 0, projEletr: 0, projQlQg: 0,
+                coletores: 2, chassi: 3, preparacaoChiller: 0, pintura: 0,
+                compressor: 6, co2: 0, chiller: 0, condensador: 8, carenagem: 8,
+                fechMecanica: 15, isolamento: 8, prepEletrLinha: 3,
+                prepEletrQuadros: 2, montagemEletrQuadros: 20,
+                fechEletrLinha: 20, montagemQcs: 0, progr: 0, teste: 5
+            },
+            "SK 2+2 CH": {
+                projBase: 0, projMec: 0, projEletr: 0, projQlQg: 0,
+                coletores: 1, chassi: 2, preparacaoChiller: 2, pintura: 0,
+                compressor: 6, co2: 0, chiller: 8, condensador: 6, carenagem: 6,
+                fechMecanica: 11, isolamento: 8, prepEletrLinha: 3,
+                prepEletrQuadros: 2, montagemEletrQuadros: 20,
+                fechEletrLinha: 20, montagemQcs: 0, progr: 0, teste: 5
+            },
+            "SK 2+2 CH2": {
+                projBase: 0, projMec: 0, projEletr: 0, projQlQg: 0,
+                coletores: 1, chassi: 2, preparacaoChiller: 2, pintura: 0,
+                compressor: 6, co2: 0, chiller: 8, condensador: 6, carenagem: 6,
+                fechMecanica: 11, isolamento: 8, prepEletrLinha: 3,
+                prepEletrQuadros: 2, montagemEletrQuadros: 20,
+                fechEletrLinha: 20, montagemQcs: 0, progr: 0, teste: 5
+            },
+            "SK 3": {
+                projBase: 0, projMec: 0, projEletr: 0, projQlQg: 0,
+                coletores: 2, chassi: 3, preparacaoChiller: 0, pintura: 0,
+                compressor: 6, co2: 0, chiller: 0, condensador: 8, carenagem: 8,
+                fechMecanica: 15, isolamento: 8, prepEletrLinha: 3,
+                prepEletrQuadros: 2, montagemEletrQuadros: 20,
+                fechEletrLinha: 20, montagemQcs: 0, progr: 0, teste: 5
+            },
+            "SK 3 CH": {
+                projBase: 0, projMec: 0, projEletr: 0, projQlQg: 0,
+                coletores: 1, chassi: 2, preparacaoChiller: 2, pintura: 0,
+                compressor: 6, co2: 0, chiller: 8, condensador: 6, carenagem: 6,
+                fechMecanica: 11, isolamento: 8, prepEletrLinha: 3,
+                prepEletrQuadros: 2, montagemEletrQuadros: 20,
+                fechEletrLinha: 20, montagemQcs: 0, progr: 0, teste: 5
+            },
+            "SK 3+2": {
+                projBase: 0, projMec: 0, projEletr: 0, projQlQg: 0,
+                coletores: 2, chassi: 3, preparacaoChiller: 0, pintura: 0,
+                compressor: 6, co2: 0, chiller: 0, condensador: 8, carenagem: 8,
+                fechMecanica: 15, isolamento: 8, prepEletrLinha: 3,
+                prepEletrQuadros: 2, montagemEletrQuadros: 20,
+                fechEletrLinha: 20, montagemQcs: 0, progr: 0, teste: 5
+            },
+            "SK 3+2 CH": {
+                projBase: 0, projMec: 0, projEletr: 0, projQlQg: 0,
+                coletores: 1, chassi: 2, preparacaoChiller: 2, pintura: 0,
+                compressor: 6, co2: 0, chiller: 8, condensador: 6, carenagem: 6,
+                fechMecanica: 11, isolamento: 8, prepEletrLinha: 3,
+                prepEletrQuadros: 2, montagemEletrQuadros: 20,
+                fechEletrLinha: 20, montagemQcs: 0, progr: 0, teste: 5
+            },
+            "SK 3+2 CH2": {
+                projBase: 0, projMec: 0, projEletr: 0, projQlQg: 0,
+                coletores: 1, chassi: 2, preparacaoChiller: 2, pintura: 0,
+                compressor: 6, co2: 0, chiller: 8, condensador: 6, carenagem: 6,
+                fechMecanica: 11, isolamento: 8, prepEletrLinha: 3,
+                prepEletrQuadros: 2, montagemEletrQuadros: 20,
+                fechEletrLinha: 20, montagemQcs: 0, progr: 0, teste: 5
+            },
+            "SK 3+3": {
+                projBase: 0, projMec: 0, projEletr: 0, projQlQg: 0,
+                coletores: 2, chassi: 3, preparacaoChiller: 0, pintura: 0,
+                compressor: 6, co2: 0, chiller: 0, condensador: 8, carenagem: 8,
+                fechMecanica: 15, isolamento: 8, prepEletrLinha: 3,
+                prepEletrQuadros: 2, montagemEletrQuadros: 20,
+                fechEletrLinha: 20, montagemQcs: 0, progr: 0, teste: 5
+            },
+            "SK 3+3 CH": {
+                projBase: 0, projMec: 0, projEletr: 0, projQlQg: 0,
+                coletores: 1, chassi: 2, preparacaoChiller: 2, pintura: 0,
+                compressor: 6, co2: 0, chiller: 8, condensador: 6, carenagem: 6,
+                fechMecanica: 11, isolamento: 8, prepEletrLinha: 3,
+                prepEletrQuadros: 2, montagemEletrQuadros: 20,
+                fechEletrLinha: 20, montagemQcs: 0, progr: 0, teste: 5
+            },
+            "SK 3+3 CH2": {
+                projBase: 0, projMec: 0, projEletr: 0, projQlQg: 0,
+                coletores: 1, chassi: 2, preparacaoChiller: 2, pintura: 0,
+                compressor: 6, co2: 0, chiller: 8, condensador: 6, carenagem: 6,
+                fechMecanica: 11, isolamento: 8, prepEletrLinha: 3,
+                prepEletrQuadros: 2, montagemEletrQuadros: 20,
+                fechEletrLinha: 20, montagemQcs: 0, progr: 0, teste: 5
+            },
+            "SK 4": {
+                projBase: 0, projMec: 0, projEletr: 0, projQlQg: 0,
+                coletores: 2, chassi: 3, preparacaoChiller: 0, pintura: 0,
+                compressor: 6, co2: 0, chiller: 0, condensador: 8, carenagem: 8,
+                fechMecanica: 15, isolamento: 8, prepEletrLinha: 3,
+                prepEletrQuadros: 2, montagemEletrQuadros: 20,
+                fechEletrLinha: 20, montagemQcs: 0, progr: 0, teste: 5
+            },
+            "SK 4 CH": {
+                projBase: 0, projMec: 0, projEletr: 0, projQlQg: 0,
+                coletores: 1, chassi: 2, preparacaoChiller: 2, pintura: 0,
+                compressor: 6, co2: 0, chiller: 8, condensador: 6, carenagem: 6,
+                fechMecanica: 11, isolamento: 8, prepEletrLinha: 3,
+                prepEletrQuadros: 2, montagemEletrQuadros: 20,
+                fechEletrLinha: 20, montagemQcs: 0, progr: 0, teste: 5
+            },
+            "SK 4+2 CO2": {
+                projBase: 0, projMec: 0, projEletr: 0, projQlQg: 0,
+                coletores: 2, chassi: 3, preparacaoChiller: 0, pintura: 0,
+                compressor: 6, co2: 6, chiller: 0, condensador: 6, carenagem: 6,
+                fechMecanica: 13, isolamento: 8, prepEletrLinha: 3,
+                prepEletrQuadros: 2, montagemEletrQuadros: 20,
+                fechEletrLinha: 20, montagemQcs: 0, progr: 0, teste: 5
+            },
+            "SK 4+2 CO2 4cil": {
+                projBase: 0, projMec: 0, projEletr: 0, projQlQg: 0,
+                coletores: 2, chassi: 3, preparacaoChiller: 0, pintura: 0,
+                compressor: 6, co2: 6, chiller: 0, condensador: 6, carenagem: 6,
+                fechMecanica: 13, isolamento: 8, prepEletrLinha: 3,
+                prepEletrQuadros: 2, montagemEletrQuadros: 20,
+                fechEletrLinha: 20, montagemQcs: 0, progr: 0, teste: 5
+            },
+            "SK 4+2 CO2 CH": {
+                projBase: 0, projMec: 0, projEletr: 0, projQlQg: 0,
+                coletores: 1, chassi: 2, preparacaoChiller: 2, pintura: 0,
+                compressor: 5, co2: 7, chiller: 5, condensador: 5, carenagem: 5,
+                fechMecanica: 10, isolamento: 8, prepEletrLinha: 3,
+                prepEletrQuadros: 2, montagemEletrQuadros: 20,
+                fechEletrLinha: 20, montagemQcs: 0, progr: 0, teste: 5
+            },
+            "SK 4+2 CO2 CH s/ CD": {
+                projBase: 0, projMec: 0, projEletr: 0, projQlQg: 0,
+                coletores: 1, chassi: 2, preparacaoChiller: 2, pintura: 0,
+                compressor: 6, co2: 8, chiller: 6, condensador: 0, carenagem: 6,
+                fechMecanica: 11, isolamento: 9, prepEletrLinha: 3,
+                prepEletrQuadros: 2, montagemEletrQuadros: 20,
+                fechEletrLinha: 20, montagemQcs: 0, progr: 0, teste: 5
+            },
+            "SK 4+2 CO2 CH2": {
+                projBase: 0, projMec: 0, projEletr: 0, projQlQg: 0,
+                coletores: 1, chassi: 2, preparacaoChiller: 2, pintura: 0,
+                compressor: 5, co2: 7, chiller: 5, condensador: 5, carenagem: 5,
+                fechMecanica: 10, isolamento: 8, prepEletrLinha: 3,
+                prepEletrQuadros: 2, montagemEletrQuadros: 20,
+                fechEletrLinha: 20, montagemQcs: 0, progr: 0, teste: 5
+            },
+            "SK 4+3 CH": {
+                projBase: 0, projMec: 0, projEletr: 0, projQlQg: 0,
+                coletores: 1, chassi: 2, preparacaoChiller: 2, pintura: 0,
+                compressor: 6, co2: 0, chiller: 8, condensador: 6, carenagem: 6,
+                fechMecanica: 11, isolamento: 8, prepEletrLinha: 3,
+                prepEletrQuadros: 2, montagemEletrQuadros: 20,
+                fechEletrLinha: 20, montagemQcs: 0, progr: 0, teste: 5
+            },
+            "SK 4+3 CH2": {
+                projBase: 0, projMec: 0, projEletr: 0, projQlQg: 0,
+                coletores: 1, chassi: 2, preparacaoChiller: 2, pintura: 0,
+                compressor: 6, co2: 0, chiller: 8, condensador: 6, carenagem: 6,
+                fechMecanica: 11, isolamento: 8, prepEletrLinha: 3,
+                prepEletrQuadros: 2, montagemEletrQuadros: 20,
+                fechEletrLinha: 20, montagemQcs: 0, progr: 0, teste: 5
+            },
+            "SK 4+3 CO2": {
+                projBase: 0, projMec: 0, projEletr: 0, projQlQg: 0,
+                coletores: 2, chassi: 3, preparacaoChiller: 0, pintura: 0,
+                compressor: 6, co2: 8, chiller: 0, condensador: 6, carenagem: 6,
+                fechMecanica: 11, isolamento: 8, prepEletrLinha: 3,
+                prepEletrQuadros: 2, montagemEletrQuadros: 20,
+                fechEletrLinha: 20, montagemQcs: 0, progr: 0, teste: 5
+            },
+            "SK 4+3 CO2 4cil": {
+                projBase: 0, projMec: 0, projEletr: 0, projQlQg: 0,
+                coletores: 2, chassi: 3, preparacaoChiller: 0, pintura: 0,
+                compressor: 6, co2: 8, chiller: 0, condensador: 6, carenagem: 6,
+                fechMecanica: 11, isolamento: 8, prepEletrLinha: 3,
+                prepEletrQuadros: 2, montagemEletrQuadros: 20,
+                fechEletrLinha: 20, montagemQcs: 0, progr: 0, teste: 5
+            },
+            "SK 4+3 CO2 CH": {
+                projBase: 0, projMec: 0, projEletr: 0, projQlQg: 0,
+                coletores: 1, chassi: 2, preparacaoChiller: 2, pintura: 0,
+                compressor: 5, co2: 7, chiller: 5, condensador: 5, carenagem: 5,
+                fechMecanica: 10, isolamento: 8, prepEletrLinha: 3,
+                prepEletrQuadros: 2, montagemEletrQuadros: 20,
+                fechEletrLinha: 20, montagemQcs: 0, progr: 0, teste: 5
+            },
+            "SK 4+3 CO2 CH2": {
+                projBase: 0, projMec: 0, projEletr: 0, projQlQg: 0,
+                coletores: 1, chassi: 2, preparacaoChiller: 2, pintura: 0,
+                compressor: 5, co2: 7, chiller: 5, condensador: 5, carenagem: 5,
+                fechMecanica: 10, isolamento: 8, prepEletrLinha: 3,
+                prepEletrQuadros: 2, montagemEletrQuadros: 20,
+                fechEletrLinha: 20, montagemQcs: 0, progr: 0, teste: 5
+            },
+            "SK 4+4 CH": {
+                projBase: 0, projMec: 0, projEletr: 0, projQlQg: 0,
+                coletores: 1, chassi: 2, preparacaoChiller: 2, pintura: 0,
+                compressor: 6, co2: 0, chiller: 8, condensador: 6, carenagem: 6,
+                fechMecanica: 11, isolamento: 8, prepEletrLinha: 3,
+                prepEletrQuadros: 2, montagemEletrQuadros: 20,
+                fechEletrLinha: 20, montagemQcs: 0, progr: 0, teste: 5
+            },
+            "SK 4+4 CH2": {
+                projBase: 0, projMec: 0, projEletr: 0, projQlQg: 0,
+                coletores: 1, chassi: 2, preparacaoChiller: 2, pintura: 0,
+                compressor: 6, co2: 0, chiller: 8, condensador: 6, carenagem: 6,
+                fechMecanica: 11, isolamento: 8, prepEletrLinha: 3,
+                prepEletrQuadros: 2, montagemEletrQuadros: 20,
+                fechEletrLinha: 20, montagemQcs: 0, progr: 0, teste: 5
+            },
+            "SK 4+4 CO2": {
+                projBase: 0, projMec: 0, projEletr: 0, projQlQg: 0,
+                coletores: 2, chassi: 3, preparacaoChiller: 0, pintura: 0,
+                compressor: 6, co2: 8, chiller: 0, condensador: 6, carenagem: 6,
+                fechMecanica: 11, isolamento: 8, prepEletrLinha: 3,
+                prepEletrQuadros: 2, montagemEletrQuadros: 20,
+                fechEletrLinha: 20, montagemQcs: 0, progr: 0, teste: 5
+            },
+            "SK 4+4 CO2 4cil": {
+                projBase: 0, projMec: 0, projEletr: 0, projQlQg: 0,
+                coletores: 2, chassi: 3, preparacaoChiller: 0, pintura: 0,
+                compressor: 6, co2: 8, chiller: 0, condensador: 6, carenagem: 6,
+                fechMecanica: 11, isolamento: 8, prepEletrLinha: 3,
+                prepEletrQuadros: 2, montagemEletrQuadros: 20,
+                fechEletrLinha: 20, montagemQcs: 0, progr: 0, teste: 5
+            },
+            "SK 4+4 CO2 CH": {
+                projBase: 0, projMec: 0, projEletr: 0, projQlQg: 0,
+                coletores: 1, chassi: 2, preparacaoChiller: 2, pintura: 0,
+                compressor: 5, co2: 7, chiller: 5, condensador: 5, carenagem: 5,
+                fechMecanica: 10, isolamento: 8, prepEletrLinha: 3,
+                prepEletrQuadros: 2, montagemEletrQuadros: 20,
+                fechEletrLinha: 20, montagemQcs: 0, progr: 0, teste: 5
+            },
+            "SK 4+4 CO2 CH2": {
+                projBase: 0, projMec: 0, projEletr: 0, projQlQg: 0,
+                coletores: 1, chassi: 2, preparacaoChiller: 2, pintura: 0,
+                compressor: 5, co2: 7, chiller: 5, condensador: 5, carenagem: 5,
+                fechMecanica: 10, isolamento: 8, prepEletrLinha: 3,
+                prepEletrQuadros: 2, montagemEletrQuadros: 20,
+                fechEletrLinha: 20, montagemQcs: 0, progr: 0, teste: 5
+            },
+            "SK 5": {
+                projBase: 0, projMec: 0, projEletr: 0, projQlQg: 0,
+                coletores: 2, chassi: 3, preparacaoChiller: 0, pintura: 0,
+                compressor: 6, co2: 0, chiller: 0, condensador: 8, carenagem: 8,
+                fechMecanica: 15, isolamento: 8, prepEletrLinha: 3,
+                prepEletrQuadros: 2, montagemEletrQuadros: 20,
+                fechEletrLinha: 20, montagemQcs: 0, progr: 0, teste: 5
+            },
+            "SK 5 CH": {
+                projBase: 0, projMec: 0, projEletr: 0, projQlQg: 0,
+                coletores: 1, chassi: 2, preparacaoChiller: 2, pintura: 0,
+                compressor: 6, co2: 0, chiller: 8, condensador: 6, carenagem: 6,
+                fechMecanica: 11, isolamento: 8, prepEletrLinha: 3,
+                prepEletrQuadros: 2, montagemEletrQuadros: 20,
+                fechEletrLinha: 20, montagemQcs: 0, progr: 0, teste: 5
+            },
+            "SK 6": {
+                projBase: 0, projMec: 0, projEletr: 0, projQlQg: 0,
+                coletores: 2, chassi: 3, preparacaoChiller: 0, pintura: 0,
+                compressor: 6, co2: 0, chiller: 0, condensador: 8, carenagem: 8,
+                fechMecanica: 15, isolamento: 8, prepEletrLinha: 3,
+                prepEletrQuadros: 2, montagemEletrQuadros: 20,
+                fechEletrLinha: 20, montagemQcs: 0, progr: 0, teste: 5
+            },
+            "SK 6 CH": {
+                projBase: 0, projMec: 0, projEletr: 0, projQlQg: 0,
+                coletores: 1, chassi: 2, preparacaoChiller: 2, pintura: 0,
+                compressor: 6, co2: 0, chiller: 8, condensador: 6, carenagem: 6,
+                fechMecanica: 11, isolamento: 8, prepEletrLinha: 3,
+                prepEletrQuadros: 2, montagemEletrQuadros: 20,
+                fechEletrLinha: 20, montagemQcs: 0, progr: 0, teste: 5
+            },
+            "SK 6+3 CO2": {
+                projBase: 0, projMec: 0, projEletr: 0, projQlQg: 0,
+                coletores: 2, chassi: 3, preparacaoChiller: 0, pintura: 0,
+                compressor: 6, co2: 8, chiller: 0, condensador: 6, carenagem: 6,
+                fechMecanica: 11, isolamento: 8, prepEletrLinha: 3,
+                prepEletrQuadros: 2, montagemEletrQuadros: 20,
+                fechEletrLinha: 20, montagemQcs: 0, progr: 0, teste: 5
+            },
+            "SK 6+3 CO2 4cil": {
+                projBase: 0, projMec: 0, projEletr: 0, projQlQg: 0,
+                coletores: 2, chassi: 3, preparacaoChiller: 0, pintura: 0,
+                compressor: 6, co2: 8, chiller: 0, condensador: 6, carenagem: 6,
+                fechMecanica: 11, isolamento: 8, prepEletrLinha: 3,
+                prepEletrQuadros: 2, montagemEletrQuadros: 20,
+                fechEletrLinha: 20, montagemQcs: 0, progr: 0, teste: 5
+            },
+            "SK 6+3 CO2 CH": {
+                projBase: 0, projMec: 0, projEletr: 0, projQlQg: 0,
+                coletores: 1, chassi: 2, preparacaoChiller: 2, pintura: 0,
+                compressor: 5, co2: 7, chiller: 5, condensador: 5, carenagem: 5,
+                fechMecanica: 10, isolamento: 8, prepEletrLinha: 3,
+                prepEletrQuadros: 2, montagemEletrQuadros: 20,
+                fechEletrLinha: 20, montagemQcs: 0, progr: 0, teste: 5
+            },
+            "SK 6+3 CO2 CH2": {
+                projBase: 0, projMec: 0, projEletr: 0, projQlQg: 0,
+                coletores: 1, chassi: 2, preparacaoChiller: 2, pintura: 0,
+                compressor: 5, co2: 7, chiller: 5, condensador: 5, carenagem: 5,
+                fechMecanica: 10, isolamento: 8, prepEletrLinha: 3,
+                prepEletrQuadros: 2, montagemEletrQuadros: 20,
+                fechEletrLinha: 20, montagemQcs: 0, progr: 0, teste: 5
+            },
+            "SK 6+4 CO2": {
+                projBase: 0, projMec: 0, projEletr: 0, projQlQg: 0,
+                coletores: 2, chassi: 3, preparacaoChiller: 0, pintura: 0,
+                compressor: 6, co2: 8, chiller: 0, condensador: 6, carenagem: 6,
+                fechMecanica: 11, isolamento: 8, prepEletrLinha: 3,
+                prepEletrQuadros: 2, montagemEletrQuadros: 20,
+                fechEletrLinha: 20, montagemQcs: 0, progr: 0, teste: 5
+            },
+            "SK 6+4 CO2 4cil": {
+                projBase: 0, projMec: 0, projEletr: 0, projQlQg: 0,
+                coletores: 2, chassi: 3, preparacaoChiller: 0, pintura: 0,
+                compressor: 6, co2: 8, chiller: 0, condensador: 6, carenagem: 6,
+                fechMecanica: 11, isolamento: 8, prepEletrLinha: 3,
+                prepEletrQuadros: 2, montagemEletrQuadros: 20,
+                fechEletrLinha: 20, montagemQcs: 0, progr: 0, teste: 5
+            },
+            "SK 6+4 CO2 CH": {
+                projBase: 0, projMec: 0, projEletr: 0, projQlQg: 0,
+                coletores: 1, chassi: 2, preparacaoChiller: 2, pintura: 0,
+                compressor: 5, co2: 7, chiller: 5, condensador: 5, carenagem: 5,
+                fechMecanica: 10, isolamento: 8, prepEletrLinha: 3,
+                prepEletrQuadros: 2, montagemEletrQuadros: 20,
+                fechEletrLinha: 20, montagemQcs: 0, progr: 0, teste: 5
+            },
+            "SK 6+4 CO2 CH2": {
+                projBase: 0, projMec: 0, projEletr: 0, projQlQg: 0,
+                coletores: 1, chassi: 2, preparacaoChiller: 2, pintura: 0,
+                compressor: 5, co2: 7, chiller: 5, condensador: 5, carenagem: 5,
+                fechMecanica: 10, isolamento: 8, prepEletrLinha: 3,
+                prepEletrQuadros: 2, montagemEletrQuadros: 20,
+                fechEletrLinha: 20, montagemQcs: 0, progr: 0, teste: 5
+            }
+        };
+
+        let userId = null;
+        let maquinasCollection;
+        let equipamentoWeightsCollection; // Nova coleção para pesos de equipamentos
+        let allMaquinasData = [];
+        let allEquipamentoWeightsData = {}; // Objeto para armazenar pesos de equipamentos por modelo
+        let selectedDate = new Date().toISOString().split('T')[0];
+        let pendingSave = null;
+
+        let monthlyChartInstance; // Instância do Chart.js para o gráfico mensal
+        let weeklyChartInstance; // Instância do Chart.js para o gráfico semanal
+
+        // Elementos para exibição do total de pesos do setor e mensagens de erro
+        let totalSectorWeightDisplay;
+        let sectorWeightErrorDisplay;
+
+        // Define os campos de progresso para as máquinas (estes são os setores)
+        const progressFields = {
+            projBase: 'Proj. Base', projMec: 'Proj. Mec.', projEletr: 'Proj. Elétr.', projQlQg: 'Proj. QL/QG',
+            coletores: 'Coletores', chassi: 'Chassi', preparacaoChiller: 'Preparação chiller', pintura: 'Pintura',
+            compressor: 'Compressor', co2: 'CO2', chiller: 'Chiller', condensador: 'Condensador', carenagem: 'Carenagem',
+            fechMecanica: 'Fech. Mecânica', isolamento: 'Isolamento', prepEletrLinha: 'Prep. Elétr. Linha',
+            prepEletrQuadros: 'Prep. Elétr. Quadros', montagemEletrQuadros: 'Montagem Elétr. Quadros',
+            fechEletrLinha: 'Fech. Elétr. Linha', montagemQcs: 'Montagem QCs (caixinhas)', progr: 'Progr', teste: 'Teste'
+        };
+
+        // Função para obter pesos de setor para um dado modelo.
+        // Se houver pesos definidos na coleção de pesos de equipamentos, usa-os.
+        // Caso contrário, retorna um objeto com todos os pesos como 0.
+        const getSectorWeightsForModel = (modelName) => {
+            if (allEquipamentoWeightsData[modelName]) {
+                return allEquipamentoWeightsData[modelName];
+            }
+            // Retorna pesos padrão (todos 0) se não houver dados para o modelo
+            const defaultWeights = {};
+            for (const key in progressFields) {
+                defaultWeights[key] = 0;
+            }
+            return defaultWeights;
+        };
+
+        // Popula o select de modelos com os dados de equipamentos disponíveis.
+        function popularModelos() {
+            const selectModelo = document.getElementById('modelo');
+            selectModelo.innerHTML = '<option value="">Selecione um modelo</option>'; // Limpa e adiciona a opção padrão
+            equipamentosData.sort((a, b) => a.nome.localeCompare(b.nome)).forEach(eq => {
+                const option = document.createElement('option');
+                option.value = eq.nome;
+                option.textContent = eq.nome;
+                selectModelo.appendChild(option);
+            });
+        }
+
+        // Renderiza os inputs para os pesos por setor no formulário de máquinas
+        function renderSectorWeightInputs(currentWeights = {}) {
+            const container = document.getElementById('sector-weights-inputs');
+            container.innerHTML = ''; // Limpa os inputs existentes
+
+            for (const key in progressFields) {
+                const labelText = progressFields[key];
+                const value = currentWeights[key] !== undefined ? currentWeights[key] : 0; // Pega o valor existente ou 0
+
+                const div = document.createElement('div');
+                div.className = 'flex flex-col';
+                div.innerHTML = `
+                    <label for="peso-${key}" class="block text-xs font-medium text-gray-600">${labelText} (%)</label>
+                    <input type="number" id="peso-${key}" data-field="${key}" min="0" max="100" value="${value}"
+                            class="mt-1 block w-full px-2 py-1 text-sm bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sector-weight-input">
+                `;
+                container.appendChild(div);
+            }
+
+            // Adiciona listener para recalcular a soma quando os pesos são alterados
+            container.querySelectorAll('.sector-weight-input').forEach(input => {
+                input.addEventListener('input', updateSectorWeightSum);
+            });
+            updateSectorWeightSum(); // Atualiza a soma inicial
+        }
+
+        // Atualiza a soma dos pesos por setor e exibe mensagens de erro
+        function updateSectorWeightSum() {
+            let sum = 0;
+            document.querySelectorAll('.sector-weight-input').forEach(input => {
+                sum += parseFloat(input.value) || 0;
+            });
+            totalSectorWeightDisplay.textContent = sum.toFixed(0); // Exibe a soma como número inteiro
+            if (Math.abs(sum - 100) > 0.01) { // Permite uma pequena margem de erro para floats
+                sectorWeightErrorDisplay.classList.remove('hidden');
+            } else {
+                sectorWeightErrorDisplay.classList.add('hidden');
+            }
+        }
+
+        // Reseta o formulário de cadastro/edição de máquinas.
+        function resetForm() {
+            document.getElementById('maquina-form').reset();
+            document.getElementById('edit-id').value = '';
+            document.getElementById('form-title').textContent = 'Cadastrar Nova Máquina';
+            document.getElementById('cancel-edit-btn').classList.add('hidden');
+            renderSectorWeightInputs({}); // Reseta os pesos do setor para 0, ou para o modelo padrão se houver
+        }
+
+        // Não mais combina dados, apenas retorna o que já está em allMaquinasData.
+        const combineData = () => allMaquinasData;
+
+        // Obtém o progresso mais alto para um campo específico da máquina em todas as datas registradas.
+        function getHighestProgress(maq, fieldKey) {
+            if (!maq.progress || Object.keys(maq.progress).length === 0) return 0;
+            // Retorna o maior valor de progresso para o campo em todas as datas.
+            return Math.max(0, ...Object.values(maq.progress).map(d => d[fieldKey] || 0));
+        }
+
+        // Calcula os dias úteis entre duas datas.
+        function calculateWorkingDays(startDateStr, endDateStr) {
+            const startDate = parseDateAsLocal(startDateStr);
+            const endDate = parseDateAsLocal(endDateStr);
+            let count = 0;
+            let currentDate = new Date(startDate.getTime());
+            currentDate.setHours(0,0,0,0); // Garante que a data seja tratada como início do dia local
+
+            while (currentDate <= endDate) {
+                const dayOfWeek = currentDate.getDay(); // 0 = Sunday, 6 = Saturday (local day)
+                if (dayOfWeek !== 0 && dayOfWeek !== 6) { // Ignora domingos e sábados
+                    count++;
+                }
+                currentDate.setDate(currentDate.getDate() + 1); // Avança para o próximo dia
+            }
+            return count;
+        }
+
+        // Calcula o progresso geral e o CRT realizado para uma máquina.
+        function calculateOverallProgress(maq) {
+            let totalPercentRealizado = 0;
+            // Usa os pesos específicos do setor do modelo da máquina, ou os pesos padrão (todos 0) se não definidos
+            const sectorWeights = getSectorWeightsForModel(maq.modelo);
+
+            for (const fieldKey in progressFields) {
+                const maxProgresso = getHighestProgress(maq, fieldKey); // Progresso do setor (0-100%)
+                const sectorWeight = sectorWeights[fieldKey] !== undefined ? sectorWeights[fieldKey] : 0; // Peso do setor (0-100%)
+
+                // Contribuição deste setor para o progresso total
+                // (Progresso do setor / 100) = porcentagem de progresso do setor
+                // (Peso do setor / 100) = porcentagem do peso do setor no CRT total
+                totalPercentRealizado += (maxProgresso / 100) * (sectorWeight / 100);
+            }
+            // Calcula o CRT realizado com base no progresso total e no CRT da máquina
+            const crtRealizado = maq.crt * totalPercentRealizado;
+            return { percent: totalPercentRealizado * 100, crt: crtRealizado };
+        }
+
+        // --- RENDERIZAÇÃO DAS TABELAS ---
+        function renderAllTables() {
+            const maquinas = combineData(); // Obtém os dados das máquinas
+            const maquinasEmAndamento = [];
+            const maquinasConcluidas = [];
+
+            // Classifica as máquinas em andamento ou concluídas
+            maquinas.forEach(maq => {
+                const progress = calculateOverallProgress(maq);
+                maq.overallProgress = progress; // Adiciona o progresso geral ao objeto da máquina
+                if (progress.percent >= 99.99) { // Considera 100% para máquinas concluídas
+                    maquinasConcluidas.push(maq);
+                } else {
+                    maquinasEmAndamento.push(maq);
+                }
+            });
+
+            // Renderiza todas as tabelas
+            renderDashboardTable(maquinasEmAndamento);
+            renderConcluidasTable(maquinasConcluidas);
+            renderLancamentoTable(maquinas);
+            renderWeeklySummaryTable(maquinas);
+            renderDailySummaryTable(maquinas);
+            renderOverdueCRTTable(maquinas); // Renderiza a nova tabela de CRT em Atraso
+            // Gráficos removidos
+            renderMachinesWithSectorWeightsTable(); // Renderiza a nova tabela de modelos com pesos
+        }
+
+        // Renderiza a tabela do Dashboard (máquinas em andamento).
+        function renderDashboardTable(maquinas) {
+            const tableBody = document.getElementById('dashboard-table-body');
+            tableBody.innerHTML = ''; // Limpa o corpo da tabela
+
+            if (maquinas.length === 0) {
+                tableBody.innerHTML = `<tr><td colspan="30" class="p-4 text-center text-gray-500 text-xs">Nenhuma máquina em andamento.</td></tr>`;
+                return;
+            }
+
+            const today = new Date();
+            // Zerar horas, minutos, segundos e milissegundos para comparação de data
+            today.setHours(0, 0, 0, 0); 
+            const currentWeek = getWeekNumber(today);
+
+            // Ordena as máquinas: primeiro por Data de Início (crescente), depois por Nome da Obra (alfabética)
+            const sortedMaquinas = [...maquinas].sort((a, b) => {
+                const dateA = a.dataInicio ? parseDateAsLocal(a.dataInicio).getTime() : 0;
+                const dateB = b.dataInicio ? parseDateAsLocal(b.dataInicio).getTime() : 0;
+                if (dateA !== dateB) {
+                    return dateA - dateB; // Ordem crescente por data de início
+                }
+                // Se Data de Início for igual, ordena por Nome da Obra (alfabética)
+                return (a.nomeObra || '').localeCompare(b.nomeObra || '');
+            });
+
+            sortedMaquinas.forEach(maq => {
+                let statusClass = 'bg-white'; // Cor de fundo padrão: branco
+                const overallProgressPercent = maq.overallProgress.percent;
+                const finalPlannedWeek = maq.dataFinalPlanejada ? getWeekNumber(parseDateAsLocal(maq.dataFinalPlanejada)) : null;
+                const startWeek = maq.semanaInicio;
+                const maquinaDataInicio = maq.dataInicio ? parseDateAsLocal(maq.dataInicio) : null;
+
+                // Lógica de cores com prioridade: Vermelho > Amarelo > Branco (Futura) > Azul > Branco (Padrão)
+
+                // 1. Prioridade Vermelho: Atrasado (semana atual > semana final planejada E não 100%)
+                if (overallProgressPercent < 99.99 && finalPlannedWeek && currentWeek > finalPlannedWeek) {
+                    statusClass = 'bg-red-100 text-red-800 font-bold';
+                }
+                // 2. Prioridade Amarelo: Atenção (semana atual é a final planejada OU a penúltima E não 100%)
+                else if (overallProgressPercent < 99.99 && finalPlannedWeek && (currentWeek === finalPlannedWeek || currentWeek === (finalPlannedWeek - 1))) {
+                    statusClass = 'bg-yellow-100 text-yellow-800 font-bold';
+                }
+                // 3. Prioridade Branco para Máquinas Futuras
+                // Se a data de início for após a data atual
+                else if (maquinaDataInicio && maquinaDataInicio.getTime() > today.getTime()) {
+                    statusClass = 'bg-white';
+                }
+                // 4. Prioridade Azul: Início de Produção (semana atual é a semana de início)
+                // Se a máquina não é vermelha, amarela, ou futura, e a semana atual é a de início
+                else if (startWeek && currentWeek === startWeek) {
+                    statusClass = 'bg-blue-100 text-blue-800 font-bold';
+                }
+                // 5. Caso contrário, mantém branco (máquina concluída ou em andamento normal, não coberta acima)
+                // O statusClass já está inicializado como 'bg-white', então não é necessário um 'else { statusClass = 'bg-white'; }'
+                // A máquina concluída (overallProgressPercent >= 99.99) também cairá aqui e permanecerá branca.
+
+
+                const tr = document.createElement('tr');
+                let progressCells = '';
+                // Cria as células de entrada de progresso para cada campo
+                Object.keys(progressFields).forEach(key => {
+                    const highestProgress = getHighestProgress(maq, key);
+                    // Aplica text-xs e text-center para os inputs de progresso
+                    progressCells += `<td class="px-3 py-2 whitespace-nowrap"><input type="number" min="0" max="100" class="progress-input" value="${highestProgress}" data-id="${maq.id}" data-field="${key}"></td>`;
+                });
+
+                // Preenche a linha da tabela com os dados da máquina na nova ordem e com classes de estilo
+                tr.innerHTML = `
+                    <td class="px-3 py-2 whitespace-nowrap text-xs text-gray-900 sticky-col font-medium ${statusClass}" style="left: 0px; min-width: 160px;">${maq.nomeObra || '-'}</td>
+                    <td class="px-3 py-2 whitespace-nowrap text-xs text-gray-900 sticky-col" style="left: 160px; min-width: 120px;">${maq.dataInicio ? parseDateAsLocal(maq.dataInicio).toLocaleDateString('pt-BR') : '-'}</td>
+                    <td class="px-3 py-2 whitespace-nowrap text-xs text-gray-500 sticky-col" style="left: 280px; min-width: 100px;">${maq.lote}</td>
+                    <td class="px-3 py-2 whitespace-nowrap text-xs text-gray-500 sticky-col" style="left: 380px; min-width: 120px;">${maq.documento}</td>
+                    <td class="px-3 py-2 whitespace-nowrap text-xs text-gray-900 sticky-col" style="left: 500px; min-width: 160px;">${maq.modelo}</td>
+                    <td class="px-3 py-2 whitespace-nowrap text-xs font-semibold text-gray-700">${maq.crt}</td>
+                    <td class="px-3 py-2 whitespace-nowrap text-xs font-semibold text-blue-700">${maq.overallProgress.percent.toFixed(2)}%</td>
+                    <td class="px-3 py-2 whitespace-nowrap text-xs font-semibold text-green-700">${maq.overallProgress.crt.toFixed(2)}</td>
+                    ${progressCells}`;
+                tableBody.appendChild(tr);
+            });
+        }
+
+        // Renderiza a tabela de Máquinas Concluídas.
+        function renderConcluidasTable(maquinas) {
+            const tableBody = document.getElementById('concluidas-table-body');
+            tableBody.innerHTML = '';
+
+            const selectedYear = document.getElementById('concluidas-year-filter').value;
+            const filteredMaquinas = maquinas.filter(maq => {
+                // Filtra as máquinas concluídas pelo ano da data de início (pode ser ajustado para data de fim se preferir)
+                return maq.dataInicio && parseDateAsLocal(maq.dataInicio).getFullYear().toString() === selectedYear;
+            });
+
+            if (filteredMaquinas.length === 0) {
+                tableBody.innerHTML = `<tr><td colspan="6" class="p-4 text-center text-gray-500 text-sm">Nenhuma máquina concluída para o ano ${selectedYear}.</td></tr>`;
+                return;
+            }
+
+            const sortedMaquinas = [...filteredMaquinas].sort((a, b) => parseDateAsLocal(b.dataInicio) - parseDateAsLocal(a.dataInicio));
+
+            sortedMaquinas.forEach(maq => {
+                // Encontra a primeira e a última data de progresso para calcular os dias úteis
+                const progressDates = Object.keys(maq.progress || {}).sort();
+                const primeiraData = progressDates.length > 0 ? progressDates[0] : null;
+                const ultimaData = progressDates.length > 0 ? progressDates[progressDates.length - 1] : null;
+
+                // Usa dataFinalPlanejada como Data Fim se disponível, caso contrário, usa ultimaData
+                const dataFimParaExibicao = maq.dataFinalPlanejada || ultimaData;
+
+                const diasUteis = (primeiraData && dataFimParaExibicao) ? calculateWorkingDays(primeiraData, dataFimParaExibicao) : 0;
+
+                // Formata as datas para exibição
+                const formattedPrimeiraData = primeiraData ? parseDateAsLocal(primeiraData).toLocaleDateString('pt-BR') : '-';
+                const formattedUltimaDataDisplay = dataFimParaExibicao ? parseDateAsLocal(dataFimParaExibicao).toLocaleDateString('pt-BR') : '-';
+
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="px-4 py-3 text-sm text-gray-700">${maq.modelo}</td>
+                    <td class="px-4 py-3 text-sm text-gray-700">${maq.nomeObra || '-'}</td>
+                    <td class="px-4 py-3 text-sm text-gray-500">${maq.lote}</td>
+                    <td class="px-4 py-3 text-sm text-gray-700">${formattedPrimeiraData}</td>
+                    <td class="px-4 py-3 text-sm text-gray-700">${formattedUltimaDataDisplay}</td>
+                    <td class="px-4 py-3 text-sm font-bold text-gray-900">${diasUteis}</td>`;
+                tableBody.appendChild(tr);
+            });
+        }
+
+        // Renderiza a tabela de Lançamento e Edição de Máquinas.
+        function renderLancamentoTable(maquinas) {
+            const tableBody = document.getElementById('lancamento-table-body');
+            tableBody.innerHTML = '';
+
+            if (maquinas.length === 0) {
+                tableBody.innerHTML = '<tr><td colspan="6" class="p-4 text-center text-gray-500 text-sm">Nenhuma máquina cadastrada.</td></tr>';
+                return;
+            }
+
+            const sortedMaquinas = [...maquinas].sort((a, b) => parseDateAsLocal(b.dataInicio) - parseDateAsLocal(a.dataInicio));
+
+            sortedMaquinas.forEach(maq => {
+                const tr = document.createElement('tr');
+                tr.setAttribute('data-id', maq.id); // Armazena o ID do documento no atributo data-id
+                tr.innerHTML = `
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${maq.documento}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${maq.lote}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${maq.nomeObra || '-'}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${maq.semanaInicio}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${maq.crt}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
+                        <button class="edit-btn text-indigo-600 hover:text-indigo-900">Editar</button>
+                        <button class="delete-btn text-red-600 hover:text-red-900">Excluir</button>
+                    </td>`;
+                tableBody.appendChild(tr);
+            });
+
+            // Adiciona event listeners aos botões de editar e excluir
+            document.querySelectorAll('.edit-btn').forEach(b => b.addEventListener('click', handleEdit));
+            document.querySelectorAll('.delete-btn').forEach(b => b.addEventListener('click', handleDelete));
+        }
+
+        // Renderiza a seção de Análise Global de CRT.
+        function renderGlobalCrtAnalysis() {
+            document.getElementById('crt-analysis-section').classList.remove('hidden');
+            const maquinas = combineData();
+            const analysisContent = document.getElementById('crt-analysis-content');
+            let crtDia = 0, crtMes = 0, crtGeral = 0;
+            const selectedMonth = selectedDate.substring(0, 7); // Obtém o ano e mês da data selecionada
+
+            maquinas.forEach(maq => {
+                const sectorWeights = getSectorWeightsForModel(maq.modelo);
+
+                // CRT Acumulado Geral (usa o overallProgress já calculado)
+                crtGeral += (maq.overallProgress || calculateOverallProgress(maq)).crt;
+
+                // CRT Produzido no Dia
+                if (maq.progress && maq.progress[selectedDate]) {
+                    for (const fieldKey in maq.progress[selectedDate]) {
+                        crtDoDia += (maq.crt * ((sectorWeights[fieldKey] || 0) / 100)) * (maq.progress[selectedDate][fieldKey] / 100);
+                    }
+                }
+
+                // CRT Produzido no Mês
+                if (maq.progress) {
+                    for (const dateKey in maq.progress) {
+                        if (dateKey.substring(0, 7) === selectedMonth) {
+                            for (const fieldKey in maq.progress[dateKey]) {
+                                crtMes += (maq.crt * ((sectorWeights[fieldKey] || 0) / 100)) * (maq.progress[dateKey][fieldKey] / 100);
+                            }
+                        }
+                    }
+                }
+            });
+
+            // Atualiza o conteúdo da seção de análise
+            analysisContent.innerHTML = `
+                <div class="bg-indigo-50 p-4 rounded-lg">
+                    <h3 class="text-sm font-medium text-indigo-800">CRT Produzido no Dia (${parseDateAsLocal(selectedDate).toLocaleDateString('pt-BR')})</h3>
+                    <p class="mt-1 text-3xl font-semibold text-indigo-600">${crtDia.toFixed(2)}</p>
+                </div>
+                <div class="bg-green-50 p-4 rounded-lg">
+                    <h3 class="text-sm font-medium text-green-800">CRT Produzido no Mês</h3>
+                    <p class="mt-1 text-3xl font-semibold text-green-600">${crtMes.toFixed(2)}</p>
+                </div>
+                <div class="bg-gray-100 p-4 rounded-lg">
+                    <h3 class="text-sm font-medium text-gray-800">CRT Acumulado (Geral)</h3>
+                    <p class="mt-1 text-3xl font-semibold text-gray-600">${crtGeral.toFixed(2)}</p>
+                </div>`;
+        }
+
+        // Renderiza a tabela de Sumário Semanal de CRT.
+        function renderWeeklySummaryTable(maquinas) {
+            const year = document.getElementById('weekly-summary-year').value;
+            const weeklyData = {}; // Objeto para armazenar o CRT por semana
+
+            maquinas.forEach(maq => {
+                const sectorWeights = getSectorWeightsForModel(maq.modelo);
+                if (!maq.progress) return;
+
+                for (const dateKey in maq.progress) {
+                    const date = parseDateAsLocal(dateKey); // Usar parseDateAsLocal
+                    if (date.getFullYear().toString() === year) { // Filtra pelo ano selecionado
+                        const week = getWeekNumber(date);
+                        let crtDoDia = 0;
+                        for (const fieldKey in maq.progress[dateKey]) {
+                            crtDoDia += (maq.crt * ((sectorWeights[fieldKey] || 0) / 100)) * (maq.progress[dateKey][fieldKey] / 100);
+                        }
+                        weeklyData[week] = (weeklyData[week] || 0) + crtDoDia;
+                    }
+                }
+            });
+
+            const tableBody = document.getElementById('weekly-summary-body');
+            tableBody.innerHTML = '';
+
+            // Renderiza as linhas da tabela ordenadas por semana
+            Object.keys(weeklyData).sort((a,b) => a-b).forEach(week => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="px-4 py-2 text-sm text-gray-700">${week}</td>
+                    <td class="px-4 py-2 text-right text-sm font-semibold text-gray-900">${weeklyData[week].toFixed(2)}</td>`;
+                tableBody.appendChild(tr);
+            });
+        }
+
+        // Renderiza a tabela de Sumário Diário de CRT.
+        function renderDailySummaryTable(maquinas) {
+            const monthYear = document.getElementById('daily-summary-month').value;
+            const dailyData = {}; // Objeto para armazenar o CRT por dia
+
+            maquinas.forEach(maq => {
+                const sectorWeights = getSectorWeightsForModel(maq.modelo);
+                if (!maq.progress) return;
+
+                for (const dateKey in maq.progress) {
+                    const date = parseDateAsLocal(dateKey); // Usar parseDateAsLocal
+                    if (dateKey.substring(0, 7) === monthYear) { // Filtra pelo mês e ano selecionados
+                        let crtDoDia = 0;
+                        for (const fieldKey in maq.progress[dateKey]) {
+                            crtDoDia += (maq.crt * ((sectorWeights[fieldKey] || 0) / 100)) * (maq.progress[dateKey][fieldKey] / 100);
+                        }
+                        dailyData[dateKey] = (dailyData[dateKey] || 0) + crtDoDia;
+                    }
+                }
+            });
+
+            const tableBody = document.getElementById('daily-summary-body');
+            tableBody.innerHTML = '';
+
+            // Renderiza as linhas da tabela ordenadas por data
+            Object.keys(dailyData).sort().forEach(date => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="px-4 py-2 text-sm text-gray-700">${parseDateAsLocal(date).toLocaleDateString('pt-BR')}</td>
+                    <td class="px-4 py-2 text-right text-sm font-semibold text-gray-900">${dailyData[date].toFixed(2)}</td>`;
+                tableBody.appendChild(tr);
+            });
+        }
+
+        // Renderiza a tabela de CRT em Atraso.
+        function renderOverdueCRTTable(maquinas) {
+            const tableBody = document.getElementById('overdue-crt-body');
+            tableBody.innerHTML = '';
+            const totalOverdueCrtDisplay = document.getElementById('total-overdue-crt');
+
+            const selectedYear = document.getElementById('overdue-summary-year').value;
+            const overdueDataByPlannedWeek = {};
+            const today = new Date();
+            today.setHours(0, 0, 0, 0); // Zerar horas para comparação de data
+            let totalCrtFaltanteGlobal = 0; // Variável para a somatória
+
+            maquinas.forEach(maq => {
+                // Check if the machine has a planned final date and if its progress is not 100%
+                if (maq.dataFinalPlanejada && maq.overallProgress.percent < 99.99) {
+                    const finalPlannedDate = parseDateAsLocal(maq.dataFinalPlanejada); // Usar parseDateAsLocal
+
+                    // Only consider machines whose planned final date is in the selected year AND are currently overdue
+                    if (finalPlannedDate.getFullYear().toString() === selectedYear && today > finalPlannedDate) {
+                        const finalPlannedWeek = getWeekNumber(finalPlannedDate);
+                        const remainingCrt = maq.crt - maq.overallProgress.crt;
+
+                        overdueDataByPlannedWeek[finalPlannedWeek] = (overdueDataByPlannedWeek[finalPlannedWeek] || 0) + remainingCrt;
+                        totalCrtFaltanteGlobal += remainingCrt; // Adiciona ao total global
+                    }
+                }
+            });
+
+            if (Object.keys(overdueDataByPlannedWeek).length === 0) {
+                tableBody.innerHTML = `<tr><td colspan="2" class="p-4 text-center text-gray-500 text-sm">Nenhum CRT em atraso para o ano ${selectedYear}.</td></tr>`;
+                totalOverdueCrtDisplay.textContent = '0.00'; // Reseta o total se não houver dados
+                return;
+            }
+
+            // Renderiza as linhas da tabela ordenadas por semana prevista
+            Object.keys(overdueDataByPlannedWeek).sort((a,b) => a-b).forEach(week => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="px-4 py-2 text-sm text-gray-700">${week}</td>
+                    <td class="px-4 py-2 text-right text-sm font-semibold text-red-600">${overdueDataByPlannedWeek[week].toFixed(2)}</td>`;
+                tableBody.appendChild(tr);
+            });
+
+            // Atualiza o total CRT Faltante no rodapé da tabela
+            totalOverdueCrtDisplay.textContent = totalCrtFaltanteGlobal.toFixed(2);
+        }
+
+        // Função para obter o ano de uma string de data
+        function getYearFromDate(dateString) {
+            return parseDateAsLocal(dateString).getFullYear(); // Usar parseDateAsLocal
+        }
+
+        // As funções de renderização dos gráficos foram removidas, portanto não estão presentes aqui.
+        // Se precisar delas novamente, elas precisarão ser reintroduzidas.
+
+        // Função para renderizar a tabela de modelos com pesos de setor lançados
+        function renderMachinesWithSectorWeightsTable() {
+            const tableBody = document.getElementById('models-with-weights-table-body');
+            tableBody.innerHTML = ''; // Limpa as linhas existentes
+
+            const modelsWithWeights = [];
+            for (const modelName in allEquipamentoWeightsData) {
+                // Recupera o CRT padrão para o modelo
+                const equipamento = equipamentosData.find(eq => eq.nome === modelName);
+                const crtStandard = equipamento ? equipamento.crt : 'N/A';
+
+                // Calcula a soma dos pesos dos setores para o modelo
+                let sum = 0;
+                const weights = allEquipamentoWeightsData[modelName];
+                for (const key in progressFields) { // Itera por todos os campos de progresso possíveis
+                    sum += parseFloat(weights[key]) || 0;
+                }
+                modelsWithWeights.push({ modelName, crtStandard, sumWeights: sum });
+            }
+
+            if (modelsWithWeights.length === 0) {
+                tableBody.innerHTML = `<tr><td colspan="4" class="p-4 text-center text-gray-500 text-sm">Nenhum modelo com pesos de setor lançados.</td></tr>`;
+                return;
+            }
+
+            // Ordena por nome do modelo
+            modelsWithWeights.sort((a, b) => a.modelName.localeCompare(b.modelName));
+
+            modelsWithWeights.forEach(item => {
+                const tr = document.createElement('tr');
+                tr.setAttribute('data-model', item.modelName); // Armazena o nome do modelo para edição
+                tr.innerHTML = `
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${item.modelName}</td>
+                    <td class="px-6 py-4 whitespace-sm text-gray-500">${item.crtStandard}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${item.sumWeights.toFixed(0)}%</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                        <button class="edit-weights-btn text-blue-600 hover:text-blue-900">Editar Pesos</button>
+                    </td>
+                `;
+                tableBody.appendChild(tr);
+            });
+
+            // Adiciona event listeners aos novos botões de edição
+            document.querySelectorAll('.edit-weights-btn').forEach(button => {
+                button.addEventListener('click', handleEditSectorWeights);
+            });
+        }
+
+        // Lida com o clique no botão "Editar Pesos" para os pesos de setor de um modelo
+        function handleEditSectorWeights(event) {
+            const modelName = event.target.closest('tr').dataset.model;
+            const modelWeights = allEquipamentoWeightsData[modelName];
+
+            if (modelWeights) {
+                // Define o valor do dropdown de modelo
+                document.getElementById('modelo').value = modelName;
+                // Dispara o evento 'change' no dropdown do modelo para atualizar o CRT e preencher os pesos do setor
+                const changeEvent = new Event('change');
+                document.getElementById('modelo').dispatchEvent(changeEvent);
+
+                // Preenche o input CRT com o CRT padrão para este modelo (já feito pelo change event no modelo)
+                // const equipamento = equipamentosData.find(eq => eq.nome === modelName);
+                // document.getElementById('crt').value = equipamento ? equipamento.crt : '';
+
+                // Sobrescreve os inputs de pesos de setor com os pesos específicos do modelo
+                renderSectorWeightInputs(modelWeights);
+
+                // Muda para a aba 'Lançar & Editar Máquinas'
+                switchTab('lancamento');
+                window.scrollTo(0, 0); // Rola para o topo da página
+            }
+        }
+
+        // --- LÓGICA DO FIREBASE (CRUD) ---
+        // Escuta por mudanças na coleção de máquinas em tempo real.
+        async function listenToMaquinas() {
+            if (!maquinasCollection) return; // Garante que a coleção está definida
+
+            onSnapshot(query(maquinasCollection), (snapshot) => {
+                allMaquinasData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                renderAllTables(); // Renderiza todas as tabelas a cada atualização
+            });
+        }
+
+        // Escuta por mudanças na coleção de pesos de equipamentos em tempo real.
+        async function listenToEquipamentoWeights() {
+            if (!equipamentoWeightsCollection) return;
+
+            onSnapshot(query(equipamentoWeightsCollection), (snapshot) => {
+                allEquipamentoWeightsData = {};
+                snapshot.docs.forEach(doc => {
+                    allEquipamentoWeightsData[doc.id] = doc.data(); // Document ID é o nome do modelo
+                });
+                renderAllTables(); // Re-renderiza as tabelas, pois os pesos podem afetar o CRT
+            });
+        }
+
+        // Executa a operação de salvar (adicionar ou atualizar) uma máquina no Firestore.
+        async function executeSave(maquina, modelName, sectorWeights, editId) {
+            try {
+                // Primeiro, salva/atualiza os pesos do setor na coleção de equipamentos
+                if (modelName) {
+                    await setDoc(doc(db, equipamentoWeightsCollection.path, modelName), sectorWeights, { merge: true });
+                } else {
+                    console.warn("Modelo não selecionado. Pesos por setor não serão salvos.");
+                }
+
+                if (editId) {
+                    // Atualiza um documento existente na coleção de máquinas
+                    await updateDoc(doc(db, maquinasCollection.path, editId), maquina);
+                } else {
+                    // Adiciona um novo documento na coleção de máquinas
+                    maquina.progress = maquina.progress || {}; // Garante que progress existe para novas máquinas
+                    await addDoc(maquinasCollection, maquina);
+                }
+                resetForm(); // Limpa o formulário após a operação
+            }
+            catch (error) {
+                console.error("Erro ao salvar a máquina ou pesos do equipamento: ", error);
+            }
+            pendingSave = null; // Reseta o estado de salvamento pendente
+        }
+
+        // Lida com a requisição de salvamento de máquina, incluindo a verificação de duplicidade de documento.
+        async function handleSaveRequest(event) {
+            event.preventDefault(); // Impede o comportamento padrão do formulário
+            if (!maquinasCollection || !equipamentoWeightsCollection) {
+                console.error("Conexão com o DB não encontrada para máquinas ou pesos de equipamento.");
+                return;
+            }
+
+            // Coleta os dados do formulário da máquina
+            const maquinaData = {
+                dataInicio: document.getElementById('dataInicio').value,
+                dataFinalPlanejada: document.getElementById('dataFinalPlanejada').value, // Novo campo
+                nomeObra: document.getElementById('nomeObra').value,
+                semanaInicio: parseInt(document.getElementById('semanaInicio').value),
+                semanaTermino: parseInt(document.getElementById('semanaTermino').value), // Coleta o novo campo
+                lote: document.getElementById('lote').value,
+                documento: document.getElementById('documento').value,
+                modelo: document.getElementById('modelo').value, // Agora é um select
+                crt: parseFloat(document.getElementById('crt').value)
+            };
+            const modelName = maquinaData.modelo;
+
+            // Coleta os pesos por setor do formulário
+            const sectorWeights = {};
+            let currentSectorWeightSum = 0;
+            document.querySelectorAll('.sector-weight-input').forEach(input => {
+                const fieldKey = input.dataset.field;
+                const value = parseFloat(input.value) || 0;
+                sectorWeights[fieldKey] = value;
+                currentSectorWeightSum += value;
+            });
+
+            const editId = document.getElementById('edit-id').value; // ID da máquina se estiver editando
+
+            // Validação da soma dos pesos do setor
+            if (Math.abs(currentSectorWeightSum - 100) > 0.01) {
+                sectorWeightErrorDisplay.classList.remove('hidden');
+                console.warn("A soma dos pesos do setor não é 100%. Por favor, ajuste.");
+                return; // Impede o salvamento se a soma não for 100%
+            } else {
+                sectorWeightErrorDisplay.classList.add('hidden');
+            }
+
+            // Verifica se o documento já existe, exceto se for a própria máquina que está sendo editada
+            const isDuplicate = allMaquinasData.some(m => m.documento === maquinaData.documento && m.id !== editId);
+
+            if (isDuplicate) {
+                // Se for duplicado, armazena os dados e mostra o modal de confirmação
+                pendingSave = { maquina: maquinaData, modelName: modelName, sectorWeights: sectorWeights, editId: editId };
+                document.getElementById('duplicate-doc-modal').classList.remove('hidden');
+            } else {
+                // Se não for duplicado, salva diretamente
+                await executeSave(maquinaData, modelName, sectorWeights, editId);
+            }
+        }
+
+        // Lida com o clique no botão "Editar" de uma máquina.
+        function handleEdit(event) {
+            const id = event.target.closest('tr').dataset.id; // Obtém o ID da máquina
+            const maquinaCompleta = allMaquinasData.find(m => m.id === id); // Encontra a máquina completa
+
+            if(maquinaCompleta) {
+                // Preenche o formulário com os dados da máquina para edição
+                document.getElementById('edit-id').value = id;
+                document.getElementById('dataInicio').value = maquinaCompleta.dataInicio;
+                document.getElementById('dataFinalPlanejada').value = maquinaCompleta.dataFinalPlanejada || ''; // Novo campo
+                document.getElementById('nomeObra').value = maquinaCompleta.nomeObra || '';
+                document.getElementById('semanaInicio').value = maquinaCompleta.semanaInicio;
+                document.getElementById('semanaTermino').value = maquinaCompleta.semanaTermino || ''; // Preenche o novo campo
+                document.getElementById('lote').value = maquinaCompleta.lote;
+                document.getElementById('documento').value = maquinaCompleta.documento;
+                document.getElementById('modelo').value = maquinaCompleta.modelo; // Agora é um select
+                document.getElementById('crt').value = maquinaCompleta.crt;
+
+                // Popula os pesos do setor com base no modelo da máquina
+                renderSectorWeightInputs(getSectorWeightsForModel(maquinaCompleta.modelo));
+
+                document.getElementById('form-title').textContent = 'Editar Máquina'; // Atualiza o título do formulário
+                document.getElementById('cancel-edit-btn').classList.remove('hidden'); // Mostra o botão cancelar
+                switchTab('lancamento'); // Muda para a aba de lançamento/edição
+                window.scrollTo(0,0); // Rola para o topo da página
+            }
+        }
+
+        // Lida com o clique no botão "Excluir" de uma máquina, mostrando o modal de confirmação.
+        function handleDelete(event) {
+            const id = event.target.closest('tr').dataset.id;
+            const modal = document.getElementById('delete-modal');
+            modal.classList.remove('hidden'); // Mostra o modal
+
+            // Clona o botão de confirmação para remover listeners anteriores
+            const confirmBtn = document.getElementById('confirm-delete-btn');
+            const newConfirmBtn = confirmBtn.cloneNode(true);
+            confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
+
+            // Adiciona um novo listener para o botão de confirmação
+            newConfirmBtn.addEventListener('click', () => {
+                deleteMaquina(id);
+                modal.classList.add('hidden'); // Esconde o modal após a exclusão
+            });
+        }
+
+        // Exclui uma máquina do Firestore.
+        async function deleteMaquina(id) {
+            if (!maquinasCollection) return;
+            try {
+                await deleteDoc(doc(db, maquinasCollection.path, id));
+                // Oculta a seção de análise CRT pois a exclusão pode invalidar os dados visíveis lá.
+                document.getElementById('crt-analysis-section').classList.add('hidden');
+            } catch (error) {
+                console.error("Erro ao excluir a máquina: ", error);
+            }
+        }
+
+        // Atualiza o progresso diário de um campo específico da máquina no Firestore.
+        async function updateDailyProgress(id, date, field, value) {
+            if (!maquinasCollection) return;
+            const docRef = doc(db, maquinasCollection.path, id);
+            // Cria um caminho de atualização dinâmico para o campo de progresso na data
+            const updatePath = `progress.${date}.${field}`;
+            try {
+                await updateDoc(docRef, { [updatePath]: value });
+            } catch (error) {
+                console.error("Erro ao atualizar progresso:", error);
+            }
+        }
+
+        // --- EVENT LISTENERS ---
+        // Objeto para gerenciar as abas de conteúdo
+        const tabs = {
+            dashboard: document.getElementById('tab-content-dashboard'),
+            lancamento: document.getElementById('tab-content-lancamento')
+        };
+        // Objeto para gerenciar os botões das abas
+        const tabBtns = {
+            dashboard: document.getElementById('tab-btn-dashboard'),
+            lancamento: document.getElementById('tab-btn-lancamento')
+        };
+
+        // Função para alternar a exibição das abas
+        function switchTab(target) {
+            for (const key in tabs) {
+                tabs[key].classList.add('hidden'); // Esconde todas as abas
+                tabBtns[key].classList.remove('active'); // Remove a classe 'active' de todos os botões
+            }
+            tabs[target].classList.remove('hidden'); // Mostra a aba alvo
+            tabBtns[target].classList.add('active'); // Adiciona a classe 'active' ao botão alvo
+        }
+
+        // Adiciona listeners para os botões das abas
+        Object.keys(tabBtns).forEach(key => tabBtns[key].addEventListener('click', () => switchTab(key)));
+
+        // Listener para atualizar o campo CRT e os pesos do setor ao selecionar um modelo
+        document.getElementById('modelo').addEventListener('change', (e) => {
+            const selectedModel = e.target.value;
+            const equipamento = equipamentosData.find(eq => eq.nome === selectedModel);
+            document.getElementById('crt').value = equipamento ? equipamento.crt : '';
+
+            // Popula os inputs de pesos do setor com base no modelo selecionado
+            renderSectorWeightInputs(getSectorWeightsForModel(selectedModel));
+        });
+
+        // Listener para atualizar a semana de início ao selecionar uma data de início
+        document.getElementById('dataInicio').addEventListener('change', (e) => {
+            if(e.target.valueAsDate){
+                // Atribui o número da semana sem incrementar
+                document.getElementById('semanaInicio').value = getWeekNumber(e.target.valueAsDate);
+            }
+        });
+
+        // NOVO: Listener para atualizar a semana de término ao selecionar uma data final planejada
+        document.getElementById('dataFinalPlanejada').addEventListener('change', (e) => {
+            if(e.target.valueAsDate){
+                // Atribui o número da semana sem incrementar
+                document.getElementById('semanaTermino').value = getWeekNumber(e.target.valueAsDate);
+            } else {
+                document.getElementById('semanaTermino').value = ''; // Limpa se a data for removida
+            }
+        });
+
+        // Listener para o envio do formulário de máquina
+        document.getElementById('maquina-form').addEventListener('submit', handleSaveRequest);
+
+        // Listener para o botão de cancelar edição
+        document.getElementById('cancel-edit-btn').addEventListener('click', resetForm);
+
+        // Listener para o botão de cancelar exclusão no modal
+        document.getElementById('cancel-delete-btn').addEventListener('click', () => {
+            document.getElementById('delete-modal').classList.add('hidden');
+        });
+
+        // Listener para o seletor de data no dashboard
+        document.getElementById('date-selector').addEventListener('change', (event) => {
+            selectedDate = event.target.value;
+            renderAllTables(); // Re-renderiza as tabelas com a nova data
+            document.getElementById('crt-analysis-section').classList.add('hidden'); // Oculta a análise CRT até ser recalculada
+        });
+
+        // Listener para as mudanças nos inputs de progresso da tabela do dashboard
+        document.getElementById('dashboard-table-body').addEventListener('change', (event) => {
+            if (event.target.classList.contains('progress-input')) {
+                const id = event.target.dataset.id;
+                const field = event.target.dataset.field;
+                let value = parseInt(event.target.value, 10);
+                // Garante que o valor esteja entre 0 e 100
+                if (isNaN(value) || value < 0) value = 0;
+                if (value > 100) value = 100;
+                event.target.value = value; // Atualiza o valor exibido
+                updateDailyProgress(id, selectedDate, field, value); // Atualiza no Firestore
+            }
+        });
+
+        // Listener para o botão de análise global de CRT
+        document.getElementById('global-analyze-crt-btn').addEventListener('click', renderGlobalCrtAnalysis);
+
+        // Listeners para os sumários semanais e diários
+        document.getElementById('weekly-summary-year').addEventListener('change', () => renderWeeklySummaryTable(combineData()));
+        document.getElementById('daily-summary-month').addEventListener('change', () => renderDailySummaryTable(combineData()));
+
+        // Listeners para o filtro de ano da tabela de CRT em Atraso
+        document.getElementById('overdue-summary-year').addEventListener('change', () => {
+            renderOverdueCRTTable(combineData());
+        });
+
+        // Listener para o filtro de ano das máquinas concluídas
+        document.getElementById('concluidas-year-filter').addEventListener('change', () => {
+            renderConcluidasTable(combineData());
+        });
+
+        // Listeners dos Modais de Duplicidade
+        document.getElementById('cancel-duplicate-btn').addEventListener('click', () => {
+            pendingSave = null;
+            document.getElementById('duplicate-doc-modal').classList.add('hidden');
+        });
+        document.getElementById('confirm-duplicate-btn').addEventListener('click', async () => {
+            if (pendingSave) {
+                await executeSave(pendingSave.maquina, pendingSave.modelName, pendingSave.sectorWeights, pendingSave.editId);
+            }
+            document.getElementById('duplicate-doc-modal').classList.add('hidden');
+        });
+
+        // --- FUNÇÕES AUXILIARES ---
+        // Calcula o número da semana a partir de uma data.
+        function getWeekNumber(d) {
+            d = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+            d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7)); // Ajusta para a quinta-feira da semana em questão.
+            var yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1)); // Primeiro dia do ano.
+            // Calcula o número da semana.
+            return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+        }
+
+        // Função para parsear a data (YYYY-MM-DD) como data local para evitar problemas de fuso horário
+        function parseDateAsLocal(dateString) {
+            const [year, month, day] = dateString.split('-').map(Number);
+            // Ao criar a data, defina-a como o início do dia para evitar problemas de fuso horário
+            const date = new Date(year, month - 1, day);
+            date.setHours(0, 0, 0, 0); 
+            return date;
+        }
+
+        // --- INICIALIZAÇÃO ---
+        // Lida com o estado de autenticação do Firebase
+        onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                userId = user.uid;
+                // Define as coleções de máquinas e pesos de equipamentos com base no ID do usuário e do aplicativo
+                maquinasCollection = collection(db, 'artifacts', appId, 'users', userId, 'maquinas');
+                equipamentoWeightsCollection = collection(db, 'artifacts', appId, 'users', userId, 'equipamentoWeights');
+
+                // Adicione os novos pesos por setor ao objeto allEquipamentoWeightsData
+                // Isso garante que eles estejam disponíveis assim que a aplicação for carregada.
+                for (const modelName in novosPesosPorSetor) {
+                    allEquipamentoWeightsData[modelName] = novosPesosPorSetor[modelName];
+                }
+
+                listenToMaquinas(); // Começa a escutar por dados das máquinas
+                listenToEquipamentoWeights(); // Começa a escutar por dados dos pesos de equipamentos
+            } else {
+                // Se não houver usuário logado, tenta o login anônimo
+                try {
+                     await signInAnonymously(auth);
+                } catch (error) {
+                    console.error("Erro no login anônimo:", error);
+                }
+            }
+        });
+
+        // Funções de inicialização que rodam uma vez
+        (async () => {
+            const today = new Date();
+            const currentYear = today.getFullYear();
+            // Define a data atual nos seletores
+            document.getElementById('date-selector').value = selectedDate;
+            document.getElementById('weekly-summary-year').value = currentYear;
+            document.getElementById('daily-summary-month').value = today.toISOString().substring(0, 7);
+            document.getElementById('overdue-summary-year').value = currentYear; // Define o ano atual para o filtro de CRT em Atraso
+            document.getElementById('concluidas-year-filter').value = currentYear; // Define o ano atual para o filtro de concluídas
+
+            totalSectorWeightDisplay = document.getElementById('total-sector-weight');
+            sectorWeightErrorDisplay = document.getElementById('sector-weight-error');
+
+            popularModelos(); // Popula o dropdown de modelos
+            // Inicializa os inputs de pesos do setor. Como nenhum modelo está selecionado no início, usa pesos padrão (todos 0).
+            renderSectorWeightInputs({});
+        })();
+    </script>
+</body>
+</html>
